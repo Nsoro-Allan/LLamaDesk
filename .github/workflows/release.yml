@@ -1,5 +1,5 @@
+# .github/workflows/release.yml
 # Build and publish llamaDesk for Windows and Linux
-# Trigger: push a version tag (e.g. v0.1.0) or run manually
 
 name: Release
 
@@ -67,10 +67,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'llamaDesk ${{ github.ref_name }}'
+          # Prefer the pushed tag when available, otherwise use the app version
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: 'LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}'
           releaseBody: |
-            ## llamaDesk ${{ github.ref_name }}
+            ## LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
 
             Download the installer for your platform below.
 
