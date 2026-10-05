@@ -67,11 +67,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Prefer the pushed tag when available, otherwise use the app version
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: 'LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}'
+          # Uses the pushed tag when available, otherwise the version from tauri.conf.json
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', '0.1.0') }}
+          releaseName: LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
           releaseBody: |
-            ## LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+            ## LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
 
             Download the installer for your platform below.
 
