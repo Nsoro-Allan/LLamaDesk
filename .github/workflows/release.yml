@@ -1,0 +1,87 @@
+# Build and publish llamaDesk for Windows and Linux
+# Trigger: push a version tag (e.g. v0.1.0) or run manually
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    name: Build ${{ matrix.label }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            label: Windows x64
+            args: ''
+          - platform: ubuntu-22.04
+            label: Linux x64
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and upload release assets
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'llamaDesk ${{ github.ref_name }}'
+          releaseBody: |
+            ## llamaDesk ${{ github.ref_name }}
+
+            Download the installer for your platform below.
+
+            - **Windows**: `.msi` or `.exe`
+            - **Linux**: `.AppImage` or `.deb`
+
+            ### Requirements
+            - [Ollama](https://ollama.com) must be installed and running
+            - At least one model pulled (`ollama pull llama3.2`)
+
+            See the [README](https://github.com/Nsoro-Allan/LLamaDesk#readme) for full documentation.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
