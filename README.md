@@ -2,7 +2,7 @@
 
 A fast, minimal **desktop** interface for chatting with your local [Ollama](https://ollama.com) models.
 
-llamaDesk is built with **Tauri 2**. It runs as a native desktop application on Windows, macOS, and Linux. Your prompts, files, and chat history never leave your machine.
+llamaDesk is built with **Tauri 2**. It runs as a native desktop application on Windows and Linux. Your prompts, files, and chat history never leave your machine.
 
 ## Features
 
@@ -29,6 +29,17 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 
 For vision features you need a vision-capable model (`llama3.2-vision`, `llava`, `gemma3`, `qwen2.5vl`, etc.).
 
+## Download
+
+Pre-built installers are available on the [Releases](https://github.com/Nsoro-Allan/LLamaDesk/releases) page.
+
+| Platform | Package |
+|----------|---------|
+| Windows  | `.msi` / `.exe` |
+| Linux    | `.AppImage` / `.deb` |
+
+After installing, make sure Ollama is running, then open llamaDesk.
+
 ## Quick start (Development)
 
 ```bash
@@ -49,7 +60,7 @@ npm run tauri dev
 
 The first run will compile the Rust side (can take a few minutes). Subsequent runs are fast.
 
-## Building installers
+## Building installers locally
 
 ```bash
 npm run tauri build
@@ -62,8 +73,19 @@ src-tauri/target/release/bundle/
 ```
 
 - **Windows** → `.msi` / `.exe`
-- **macOS** → `.dmg` / `.app`
-- **Linux** → `.deb` / `.AppImage`
+- **Linux** → `.AppImage` / `.deb`
+
+## App icon
+
+The project uses `src/Assets/favicon.png` as the source icon.
+
+To regenerate all platform icons:
+
+```bash
+npm run tauri icon src/Assets/favicon.png
+```
+
+This updates the files in `src-tauri/icons/`. Commit the generated icons so builds (including GitHub Actions) use the correct icon.
 
 ## Usage
 
@@ -106,17 +128,46 @@ LLamaDesk/
 │   ├── app.js
 │   ├── style.css
 │   └── Assets/
+│       └── favicon.png
 ├── src-tauri/              # Tauri / Rust backend
 │   ├── src/
 │   ├── icons/
 │   ├── capabilities/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── .github/
+│   └── workflows/
+│       └── release.yml     # GitHub Actions release pipeline
 ├── package.json
 ├── package-lock.json
 ├── LICENSE
 └── README.md
 ```
+
+## Releasing (GitHub Actions)
+
+Releases are built automatically for **Windows** and **Linux** via GitHub Actions.
+
+### Create a new release
+
+1. Update the version in:
+   - `package.json`
+   - `src-tauri/tauri.conf.json`
+2. Commit and push to `main`.
+3. Create and push a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow will:
+
+- Build Windows (`.msi` / `.exe`) and Linux (`.AppImage` / `.deb`) installers
+- Create a GitHub Release named **LLamaDesk v0.1.0**
+- Attach the installers to the release
+
+You can also trigger the workflow manually from the **Actions** tab → **Release** → **Run workflow**.
 
 ## How it works
 
@@ -146,6 +197,11 @@ The current model probably does not support vision. Switch to a vision model.
 **Build fails**  
 Ensure you have installed all [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS and that Rust is up to date (`rustup update`).
 
+**GitHub Actions release not appearing**  
+- Confirm `.github/workflows/release.yml` is on the `main` branch.  
+- Make sure the workflow has not been disabled.  
+- Push a `v*` tag (e.g. `v0.1.0`) to trigger a release.
+
 ## Privacy
 
 llamaDesk only talks to the Ollama address you configure. It loads no external fonts, scripts, analytics, or tracking. All chats stay on your machine.
@@ -170,6 +226,7 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - Per-chat system prompts
 - System tray support
 - Auto-updater
+- macOS builds (requires Apple Developer certificate)
 
 ## License
 
