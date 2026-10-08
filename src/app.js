@@ -41,6 +41,12 @@
   function applyTheme(t) {
     if (t === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
+    // Keep highlight.js theme in sync
+    const link = document.getElementById('hljs-theme');
+    if (link) {
+      const dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      link.href = dark ? 'highlight-dark.css' : 'highlight-light.css';
+    }
   }
   function setTheme(t, save = true) {
     applyTheme(t);
@@ -64,7 +70,7 @@
   }
   function showBanner(msg) { els.banner.hidden = !msg; els.banner.textContent = msg || ''; }
 
-  /* ---------- markdown (escaped, no external libs) ---------- */
+  /* ---------- markdown (escaped, no external libs for core parsing) ---------- */
   function inline(s) {
     return s.split(/(`[^`\n]+`)/).map((part, i) => {
       if (i % 2) return '<code>' + part.slice(1, -1) + '</code>';
@@ -81,7 +87,7 @@
   function md(src) {
     const blocks = [];
     let t = src.replace(/```([\w+-]*)[^\n]*\n?([\s\S]*?)(```|$)/g, (m, lang, code) => {
-      blocks.push({ lang, code: code.replace(/\n$/, '') });
+      blocks.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\n$/, '') });
       return '\n\u0000' + (blocks.length - 1) + '\u0000\n';
     });
     t = esc(t);
@@ -94,8 +100,9 @@
       if ((m = line.match(/^\u0000(\d+)\u0000$/))) {
         flushPara(); flushList();
         const b = blocks[+m[1]];
+        const langClass = b.lang ? ' class="language-' + esc(b.lang) + '"' : '';
         out += '<div class="code"><div class="code-head"><span>' + esc(b.lang || 'text') +
-               '</span><button type="button" data-copy>Copy</button></div><pre><code>' + esc(b.code) + '</code></pre></div>';
+               '</span><button type="button" data-copy>Copy</button></div><pre><code' + langClass + '>' + esc(b.code) + '</code></pre></div>';
       } else if (isRow(line) && i + 1 < lines.length && isSep(lines[i + 1])) {
         flushPara(); flushList();
         const head = cells(line); const rows = [];
@@ -120,8 +127,13 @@
       } else if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
         flushPara(); flushList(); out += '<hr>';
       } else if (!line.trim()) {
-        flushPara(); flushList();
-      } else { flushList(); para.push(line); }
+        // Blank lines close paragraphs but KEEP the current list open
+        // so consecutive list items stay in one <ol>/<ul> and get sequential numbers.
+        flushPara();
+      } else {
+        flushList();
+        para.push(line);
+      }
     }
     flushPara(); flushList();
     return out;
@@ -281,7 +293,14 @@
     const a = m.el.actions; a.innerHTML = '';
     if (m.content) {
       const c = document.createElement('button'); c.className = 'icon-btn'; c.innerHTML = ICON.copy; c.title = 'Copy'; c.setAttribute('aria-label', 'Copy reply');
-      c.onclick = () => navigator.clipboard.writeText(m.content).then(() => { c.innerHTML = ICON.check; setTimeout(() => (c.innerHTML = ICON.copy), 1400); }, () => toast('Copy failed.'));
+      // Copy the *rendered* text the user sees (sequential numbers, no raw markdown)
+      c.onclick = () => {
+        const text = (m.el.bubble && m.el.bubble.innerText) ? m.el.bubble.innerText.trim() : m.content;
+        navigator.clipboard.writeText(text).then(
+          () => { c.innerHTML = ICON.check; setTimeout(() => (c.innerHTML = ICON.copy), 1400); },
+          () => toast('Copy failed.')
+        );
+      };
       a.appendChild(c);
     }
     const r = document.createElement('button'); r.className = 'icon-btn regen'; r.innerHTML = ICON.regen; r.title = 'Regenerate'; r.setAttribute('aria-label', 'Regenerate reply');
@@ -311,6 +330,12 @@
       html += md(m.content || '');
       m.el.bubble.innerHTML = html;
       m.el.bubble.classList.toggle('cursor', !final);
+      // Syntax-highlight code blocks when highlight.js is available
+      if (final && window.hljs) {
+        m.el.bubble.querySelectorAll('pre code').forEach((el) => {
+          try { window.hljs.highlightElement(el); } catch (_) {}
+        });
+      }
       if (nearBottom) els.scroll.scrollTop = els.scroll.scrollHeight;
     };
     final ? run() : (raf = requestAnimationFrame(run));
