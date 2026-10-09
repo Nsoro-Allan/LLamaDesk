@@ -289,13 +289,20 @@
     w.append(b, actions); els.thread.appendChild(w);
     m.el = { root: w, bubble: b, actions, meta };
   }
+
   function finishAssistant(m) {
     const a = m.el.actions; a.innerHTML = '';
     if (m.content) {
       const c = document.createElement('button'); c.className = 'icon-btn'; c.innerHTML = ICON.copy; c.title = 'Copy'; c.setAttribute('aria-label', 'Copy reply');
-      // Copy the *rendered* text the user sees (sequential numbers, no raw markdown)
+      // Copy rendered reply text only — exclude the Reasoning <details> block
       c.onclick = () => {
-        const text = (m.el.bubble && m.el.bubble.innerText) ? m.el.bubble.innerText.trim() : m.content;
+        let text = '';
+        if (m.el.bubble) {
+          const clone = m.el.bubble.cloneNode(true);
+          clone.querySelectorAll('details.think').forEach((d) => d.remove());
+          text = clone.innerText.trim();
+        }
+        if (!text) text = m.content || '';
         navigator.clipboard.writeText(text).then(
           () => { c.innerHTML = ICON.check; setTimeout(() => (c.innerHTML = ICON.copy), 1400); },
           () => toast('Copy failed.')
@@ -325,11 +332,27 @@
   function paint(m, final) {
     cancelAnimationFrame(raf);
     const run = () => {
+      // Preserve the user's open/closed choice across re-renders (streaming keeps
+      // calling paint and would otherwise reset <details> every frame).
+      const prev = m.el.bubble.querySelector('details.think');
+      if (prev) m.thinkOpen = prev.open;
+      else if (m.thinkOpen === undefined) m.thinkOpen = !m.content; // open while pure thinking
+
       let html = '';
-      if (m.thinking) html += '<details class="think"' + (m.content ? '' : ' open') + '><summary>Reasoning</summary><div>' + esc(m.thinking) + '</div></details>';
+      if (m.thinking) {
+        html += '<details class="think"' + (m.thinkOpen ? ' open' : '') +
+                '><summary>Reasoning</summary><div>' + esc(m.thinking) + '</div></details>';
+      }
       html += md(m.content || '');
       m.el.bubble.innerHTML = html;
       m.el.bubble.classList.toggle('cursor', !final);
+
+      // Keep m.thinkOpen in sync if the user toggles while we are not painting
+      const details = m.el.bubble.querySelector('details.think');
+      if (details) {
+        details.addEventListener('toggle', () => { m.thinkOpen = details.open; });
+      }
+
       // Syntax-highlight code blocks when highlight.js is available
       if (final && window.hljs) {
         m.el.bubble.querySelectorAll('pre code').forEach((el) => {
