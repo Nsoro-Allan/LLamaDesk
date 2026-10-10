@@ -57,7 +57,11 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libssl-dev
+            libssl-dev \
+            libasound2-dev \
+            build-essential \
+            cmake \
+            pkg-config
 
       - name: Install frontend dependencies
         run: npm install
