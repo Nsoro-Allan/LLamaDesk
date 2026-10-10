@@ -153,6 +153,24 @@ main.empty .composer-wrap { padding-bottom: 0; }
 }
 .round-btn:hover { color: var(--ink); background: var(--hover); }
 .row-right { display: flex; align-items: center; gap: 8px; }
+.row-left { display: flex; align-items: center; gap: 2px; }
+
+#mic.recording {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 18%, transparent);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+#mic.processing {
+  color: var(--muted);
+  opacity: 0.75;
+}
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mic.recording { animation: none; }
+}
 .dd { position: relative; }
 .dd-btn {
   display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 7px 12px;

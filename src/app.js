@@ -4,14 +4,17 @@
     main: $('#main'), dd: $('#modelDd'), ddBtn: $('#modelBtn'), ddLabel: $('#modelLabel'), ddMenu: $('#modelMenu'), status: $('#status'), system: $('#system'), temp: $('#temp'), tval: $('#tval'),
     base: $('#base'), refresh: $('#refresh'), thread: $('#thread'), scroll: $('#scroll'), input: $('#input'),
     send: $('#send'), attach: $('#attach'), file: $('#file'), pending: $('#pending'), composer: $('#composer'),
-    list: $('#list'), q: $('#q'), banner: $('#banner'), dlg: $('#settings'), seg: $('#themeSeg')
+    list: $('#list'), q: $('#q'), banner: $('#banner'), dlg: $('#settings'), seg: $('#themeSeg'),
+    mic: $('#mic')
   };
   const ICON = {
     up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
     stop: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>',
     copy: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
     check: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
-    regen: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>'
+    regen: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+    mic: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
   };
 
   const state = { models: [], model: '', convs: [], cur: null, pending: [], busy: false, abort: null, vision: null };
@@ -228,6 +231,149 @@
 
   /* ---------- conversations ---------- */
   const msgs = () => (state.cur ? state.cur.messages : []);
+
+  /* ---------- speech-to-text (tauri-plugin-stt / Whisper) ---------- */
+  // Works via window.__TAURI__ (withGlobalTauri: true) — no bundler required.
+  let sttListening = false;
+
+  function setMicUI(mode) {
+    // mode: 'idle' | 'recording' | 'processing'
+    if (!els.mic) return;
+    els.mic.classList.toggle('recording', mode === 'recording');
+    els.mic.classList.toggle('processing', mode === 'processing');
+    els.mic.innerHTML = mode === 'recording' ? ICON.micOff : ICON.mic;
+    els.mic.title =
+      mode === 'recording' ? 'Stop & transcribe' :
+      mode === 'processing' ? 'Transcribing…' :
+      'Voice input';
+    els.mic.setAttribute('aria-label', els.mic.title);
+    sttListening = mode === 'recording';
+  }
+
+  function stopSttIfListening() {
+    if (!sttListening) return;
+    const core = window.__TAURI__ && window.__TAURI__.core;
+    if (core) {
+      setMicUI('processing');
+      core.invoke('plugin:stt|stop_listening').catch(() => setMicUI('idle'));
+    }
+  }
+
+  async function initStt() {
+    if (!els.mic) return;
+    const T = window.__TAURI__;
+    if (!T || !T.core || !T.event) {
+      // Not running inside Tauri (e.g. plain browser) — hide mic
+      els.mic.hidden = true;
+      return;
+    }
+    const { invoke } = T.core;
+    const { listen } = T.event;
+
+    els.mic.hidden = false;
+    els.mic.innerHTML = ICON.mic;
+
+    async function ensureModel() {
+      try {
+        const avail = await invoke('plugin:stt|is_available');
+        if (avail === true || (avail && avail.available)) return true;
+      } catch (_) {}
+      toast('Downloading voice model (one-time, ~75 MB)…');
+      await invoke('plugin:stt|install_model', { id: 'tiny' });
+      toast('Voice model ready.');
+      return true;
+    }
+
+    async function toggleMic() {
+      try {
+        if (sttListening) {
+          setMicUI('processing');
+          await invoke('plugin:stt|stop_listening');
+          return;
+        }
+
+        // Microphone permission
+        try {
+          const perm = await invoke('plugin:stt|check_permission');
+          const ok = perm === 'granted' || (perm && perm.microphone === 'granted');
+          if (!ok) {
+            const r = await invoke('plugin:stt|request_permission');
+            const granted = r === 'granted' || (r && r.microphone === 'granted');
+            if (!granted) {
+              toast('Microphone permission is required for voice input.');
+              return;
+            }
+          }
+        } catch (_) {
+          // Some builds may not expose permission helpers; continue and let OS prompt
+        }
+
+        await ensureModel();
+        setMicUI('recording');
+        await invoke('plugin:stt|start_listening', {
+          config: { language: navigator.language || 'en' }
+        });
+      } catch (e) {
+        setMicUI('idle');
+        const msg = (e && e.message) ? e.message : String(e);
+        if (/ModelNotInstalled|not installed/i.test(msg)) {
+          toast('Voice model missing. Press the mic again to download it.');
+        } else {
+          toast('Voice input error: ' + msg);
+        }
+      }
+    }
+
+    els.mic.addEventListener('click', toggleMic);
+
+    // Final transcript from Whisper
+    await listen('stt://result', (event) => {
+      const payload = event.payload || {};
+      const text = (payload.transcript || '').trim();
+      if (!text) return;
+      const cur = els.input.value;
+      els.input.value = cur && !/\s$/.test(cur) ? cur + ' ' + text : cur + text;
+      autoGrow();
+      updateSend();
+      setMicUI('idle');
+    });
+
+    // State machine
+    await listen('plugin:stt:stateChange', (event) => {
+      const s = (event.payload && event.payload.state) || event.payload;
+      if (s === 'listening') setMicUI('recording');
+      else if (s === 'processing') setMicUI('processing');
+      else setMicUI('idle');
+    });
+
+    // Errors
+    await listen('stt://error', (event) => {
+      setMicUI('idle');
+      const err = event.payload || {};
+      if (err.code === 'NO_SPEECH') toast('No speech detected.');
+      else if (err.code !== 'ABORTED') toast(err.message || 'Speech recognition error');
+    });
+    await listen('plugin:stt:error', (event) => {
+      setMicUI('idle');
+      const err = event.payload || {};
+      if (err.code !== 'ABORTED') toast(err.message || 'Speech recognition error');
+    });
+
+    // Download progress (first run)
+    await listen('stt://download-progress', (event) => {
+      const p = event.payload || {};
+      if (typeof p.progress === 'number') {
+        toast('Downloading model… ' + Math.round(p.progress) + '%');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sttListening) toggleMic();
+    });
+  }
+
+  initStt();
+
   function setMode() { els.main.classList.toggle('empty', msgs().length === 0); }
   function ensureConv() {
     if (state.cur) return;
@@ -386,6 +532,7 @@
 
   function send() {
     if (state.busy) { stopIfBusy(); return; }
+    if (typeof stopSttIfListening === 'function') stopSttIfListening();
     const text = els.input.value.trim();
     if (!text && !state.pending.length) return;
     const model = state.model;
