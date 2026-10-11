@@ -8,13 +8,14 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 
 - **Native desktop app** (small binary, low memory usage)
 - **Streaming responses** with a Stop button and tokens-per-second readout
+- **Voice input** (push-to-talk) powered by on-device Whisper via `tauri-plugin-stt` — works offline after a one-time model download
 - **Image input** for vision models (attach, drag & drop, or paste)
 - **Text and code file input** (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.js`, and more)
 - **Chat history** saved locally, with search and per-chat delete
 - **Custom model picker** that lists every model installed in Ollama
-- **Markdown rendering** with code blocks, tables, lists, and headings
-- **Reasoning display** (collapsible) for models that return thinking
-- **Copy** and **Regenerate** on every reply
+- **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, and headings
+- **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
+- **Copy** (rendered reply, without the Reasoning block) and **Regenerate** on every reply
 - **Settings** for system prompt, temperature, Ollama address, and theme
 - **Responsive layout** with collapsible sidebar
 
@@ -22,12 +23,34 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 
 - [Ollama](https://ollama.com/download) installed and running
 - At least one model pulled (`ollama pull llama3.2`)
+- A working microphone if you use voice input
 - For development / building from source:
   - [Node.js](https://nodejs.org/) (LTS)
   - [Rust](https://www.rust-lang.org/tools/install)
-  - Platform-specific dependencies (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
+  - Platform-specific dependencies (see below and [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
 
 For vision features you need a vision-capable model (`llama3.2-vision`, `llava`, `gemma3`, `qwen2.5vl`, etc.).
+
+### Linux system packages (build / from source)
+
+On Ubuntu / Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev \
+  libappindicator3-dev \
+  librsvg2-dev \
+  patchelf \
+  libssl-dev \
+  libasound2-dev \
+  build-essential \
+  cmake \
+  pkg-config
+```
+
+- `libasound2-dev` is required for microphone capture (ALSA / `cpal`)
+- `cmake` and `build-essential` are required to compile Whisper (`whisper-rs-sys`)
 
 ## Download
 
@@ -47,7 +70,7 @@ After installing, make sure Ollama is running, then open llamaDesk.
 git clone https://github.com/Nsoro-Allan/LLamaDesk.git
 cd LLamaDesk
 
-# 2. Install dependencies
+# 2. Install frontend tooling
 npm install
 
 # 3. Make sure Ollama is running
@@ -58,7 +81,9 @@ ollama pull llama3.2  # if you don't have a model yet
 npm run tauri dev
 ```
 
-The first run will compile the Rust side (can take a few minutes). Subsequent runs are fast.
+The first run compiles the Rust side (including Whisper). That can take several minutes. Later runs are much faster.
+
+On first use of the microphone, the app downloads a small Whisper model (`tiny`, ~75 MB) once. After that, voice input works fully offline.
 
 ## Building installers locally
 
@@ -94,11 +119,20 @@ This updates the files in `src-tauri/icons/`. Commit the generated icons so buil
 | Send a message       | `Enter`                                          |
 | New line             | `Shift` + `Enter`                                |
 | Stop generating      | Click the stop button in the input box           |
+| **Voice input**      | Mic button next to Attach → speak → click again (or `Esc`) to transcribe |
 | Attach files         | Paperclip button, drag & drop, or paste an image |
 | Switch model         | Model name at the bottom right of the input box  |
 | New chat             | **New chat** in the sidebar                      |
 | Regenerate a reply   | Refresh icon under the latest reply              |
 | Settings             | Gear icon at the bottom of the sidebar           |
+
+### Voice input
+
+- Uses **on-device Whisper** (via [tauri-plugin-stt](https://github.com/brenogonzaga/tauri-plugin-stt)).
+- Flow is **push-to-talk**: start → speak → stop → transcript is inserted into the input.
+- First use downloads the `tiny` model (~75 MB) into the app data directory; later use is offline.
+- Grant microphone permission when the OS prompts you.
+- Works on Windows, macOS, and Linux.
 
 ### Attachments
 
@@ -110,12 +144,12 @@ This updates the files in `src-tauri/icons/`. Commit the generated icons so buil
 
 Open **Settings** from the sidebar.
 
-| Setting          | Description                               | Default                  |
-|------------------|-------------------------------------------|--------------------------|
-| Ollama address   | Base URL of the Ollama server             | `http://localhost:11434` |
-| System prompt    | Instruction sent before every conversation| empty                    |
-| Temperature      | Sampling temperature (0 – 2)              | `0.7`                    |
-| Theme            | Dark / Light / System                     | Dark                     |
+| Setting          | Description                                | Default                  |
+|------------------|--------------------------------------------|--------------------------|
+| Ollama address   | Base URL of the Ollama server              | `http://localhost:11434` |
+| System prompt    | Instruction sent before every conversation | empty                    |
+| Temperature      | Sampling temperature (0 – 2)               | `0.7`                    |
+| Theme            | Dark / Light / System                      | Dark                     |
 
 Settings and chats are stored in the app’s local storage.
 
@@ -123,21 +157,24 @@ Settings and chats are stored in the app’s local storage.
 
 ```
 LLamaDesk/
-├── src/                    # Frontend (HTML, CSS, JS)
+├── src/                         # Frontend (HTML, CSS, JS)
 │   ├── index.html
 │   ├── app.js
 │   ├── style.css
+│   ├── highlight.min.js         # Code syntax highlighting
+│   ├── highlight-dark.css
+│   ├── highlight-light.css
 │   └── Assets/
 │       └── favicon.png
-├── src-tauri/              # Tauri / Rust backend
+├── src-tauri/                   # Tauri / Rust backend
 │   ├── src/
 │   ├── icons/
 │   ├── capabilities/
-│   ├── Cargo.toml
+│   ├── Cargo.toml               # Includes tauri-plugin-stt
 │   └── tauri.conf.json
 ├── .github/
 │   └── workflows/
-│       └── release.yml     # GitHub Actions release pipeline
+│       └── release.yml          # GitHub Actions release pipeline
 ├── package.json
 ├── package-lock.json
 ├── LICENSE
@@ -157,29 +194,31 @@ Releases are built automatically for **Windows** and **Linux** via GitHub Action
 3. Create and push a version tag:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The workflow will:
 
+- Install Linux build deps (including `libasound2-dev` and `cmake` for STT)
 - Build Windows (`.msi` / `.exe`) and Linux (`.AppImage` / `.deb`) installers
-- Create a GitHub Release named **LLamaDesk v0.1.0**
-- Attach the installers to the release
+- Create a GitHub Release and attach the installers
 
 You can also trigger the workflow manually from the **Actions** tab → **Release** → **Run workflow**.
 
 ## How it works
 
-llamaDesk talks directly to your local Ollama instance using these endpoints:
+llamaDesk talks directly to your local Ollama instance:
 
-| Endpoint         | Purpose                                      |
-|------------------|----------------------------------------------|
-| `GET /api/tags`  | List installed models                        |
-| `POST /api/show` | Check whether a model supports vision        |
+| Endpoint         | Purpose                                           |
+|------------------|---------------------------------------------------|
+| `GET /api/tags`  | List installed models                             |
+| `POST /api/show` | Check whether a model supports vision             |
 | `POST /api/chat` | Stream the model’s reply (newline-delimited JSON) |
 
-Because it runs as a desktop app, there are **no CORS or origin issues**. It simply connects to `http://localhost:11434` (or whatever address you set in Settings).
+Voice input is handled by the native STT plugin (Whisper). Audio never leaves your machine after the optional one-time model download.
+
+Because it runs as a desktop app, there are **no CORS or origin issues**. It connects to `http://localhost:11434` (or whatever address you set in Settings).
 
 ## Troubleshooting
 
@@ -194,17 +233,30 @@ Run `ollama pull llama3.2` (or any other model), then click **Reload models** in
 **Image answers are empty / poor**  
 The current model probably does not support vision. Switch to a vision model.
 
-**Build fails**  
-Ensure you have installed all [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS and that Rust is up to date (`rustup update`).
+**Voice input / microphone**  
+- Allow microphone access when the OS asks.  
+- On first use, wait for the Whisper model download to finish (~75 MB).  
+- Linux builds need `libasound2-dev` at compile time (included in the release workflow).  
+- If transcription fails with “no speech”, speak a bit longer or check that the correct mic is selected in the OS.
+
+**Linux build fails with `Package 'alsa' not found`**  
+Install ALSA and build tools:
+
+```bash
+sudo apt-get install -y libasound2-dev build-essential cmake pkg-config
+```
+
+**Build fails (general)**  
+Ensure you have installed all [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS and that Rust is up to date (`rustup update`). The first compile of Whisper can take several minutes.
 
 **GitHub Actions release not appearing**  
 - Confirm `.github/workflows/release.yml` is on the `main` branch.  
 - Make sure the workflow has not been disabled.  
-- Push a `v*` tag (e.g. `v0.1.0`) to trigger a release.
+- Push a `v*` tag (e.g. `v0.1.1`) to trigger a release.
 
 ## Privacy
 
-llamaDesk only talks to the Ollama address you configure. It loads no external fonts, scripts, analytics, or tracking. All chats stay on your machine.
+llamaDesk only talks to the Ollama address you configure. Voice models are downloaded from Hugging Face once and then used offline. The app loads no analytics or tracking. All chats stay on your machine.
 
 ## Contributing
 
@@ -227,6 +279,7 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - System tray support
 - Auto-updater
 - macOS builds (requires Apple Developer certificate)
+- Optional larger Whisper models in Settings
 
 ## License
 
@@ -235,4 +288,5 @@ Released under the [MIT License](LICENSE).
 ## Acknowledgements
 
 Built for use with [Ollama](https://ollama.com) and [Tauri](https://tauri.app).  
+Speech-to-text uses [tauri-plugin-stt](https://github.com/brenogonzaga/tauri-plugin-stt) (Whisper).  
 llamaDesk is an independent project and is not affiliated with or endorsed by Ollama or the Tauri project.
