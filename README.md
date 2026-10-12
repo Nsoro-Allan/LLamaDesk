@@ -83,7 +83,7 @@ npm run tauri dev
 
 The first run compiles the Rust side (including Whisper). That can take several minutes. Later runs are much faster.
 
-On first use of the microphone, the app downloads a small Whisper model (`tiny`, ~75 MB) once. After that, voice input works fully offline.
+On first use of the microphone, the app downloads a small Whisper model (`base`) once. After that, voice input works fully offline.
 
 ## Building installers locally
 

@@ -13,6 +13,7 @@
     copy: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
     check: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     regen: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+    pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     mic: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
     micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
   };
@@ -278,8 +279,8 @@
         const avail = await invoke('plugin:stt|is_available');
         if (avail === true || (avail && avail.available)) return true;
       } catch (_) {}
-      toast('Downloading voice model (one-time, ~75 MB)…');
-      await invoke('plugin:stt|install_model', { id: 'tiny' });
+      toast('Downloading voice model (one-time)…');
+      await invoke('plugin:stt|install_model', { id: 'base' });
       toast('Voice model ready.');
       return true;
     }
@@ -373,7 +374,7 @@
   }
 
   initStt();
-
+  
   function setMode() { els.main.classList.toggle('empty', msgs().length === 0); }
   function ensureConv() {
     if (state.cur) return;
@@ -389,11 +390,30 @@
       n.textContent = q ? 'No matching chats' : 'Your chats will appear here'; els.list.appendChild(n); return;
     }
     items.forEach((c) => {
-      const row = document.createElement('div'); row.className = 'conv' + (state.cur && state.cur.id === c.id ? ' active' : ''); row.dataset.id = c.id;
-      const b = document.createElement('button'); b.className = 'conv-main'; b.textContent = c.title; b.title = c.title;
-      const d = document.createElement('button'); d.className = 'conv-del'; d.textContent = '×'; d.setAttribute('aria-label', 'Delete chat: ' + c.title);
+      const row = document.createElement('div');
+      row.className = 'conv' + (state.cur && state.cur.id === c.id ? ' active' : '');
+      row.dataset.id = c.id;
+
+      const b = document.createElement('button');
+      b.className = 'conv-main';
+      b.textContent = c.title;
+      b.title = c.title;
+
+      const ren = document.createElement('button');
+      ren.className = 'conv-ren';
+      ren.innerHTML = ICON.pencil;
+      ren.setAttribute('aria-label', 'Rename chat: ' + c.title);
+      ren.title = 'Rename';
+      ren.dataset.ren = '1';
+
+      const d = document.createElement('button');
+      d.className = 'conv-del';
+      d.textContent = '×';
+      d.setAttribute('aria-label', 'Delete chat: ' + c.title);
       d.dataset.del = '1';
-      row.append(b, d); els.list.appendChild(row);
+
+      row.append(b, ren, d);
+      els.list.appendChild(row);
     });
   }
   function stopIfBusy() { if (state.busy && state.abort) state.abort.abort(); }
@@ -409,6 +429,50 @@
     state.convs = state.convs.filter((c) => c.id !== id);
     if (state.cur && state.cur.id === id) { newChat(); }
     persist(); renderSidebar();
+  }
+  function renameConv(id, title) {
+    const c = state.convs.find((x) => x.id === id); if (!c) return;
+    const t = (title || '').trim();
+    if (!t || t === c.title) { renderSidebar(); return; }
+    c.title = t.length > 80 ? t.slice(0, 80).trim() : t;
+    c.updated = Date.now();
+    persist();
+    renderSidebar();
+  }
+  function startRename(id) {
+    const row = els.list.querySelector('.conv[data-id="' + id + '"]');
+    if (!row || row.querySelector('.conv-edit')) return;
+    const c = state.convs.find((x) => x.id === id); if (!c) return;
+
+    const main = row.querySelector('.conv-main');
+    const ren = row.querySelector('.conv-ren');
+    const del = row.querySelector('.conv-del');
+    if (main) main.hidden = true;
+    if (ren) ren.hidden = true;
+    if (del) del.hidden = true;
+
+    const input = document.createElement('input');
+    input.className = 'conv-edit';
+    input.type = 'text';
+    input.value = c.title;
+    input.maxLength = 80;
+    input.setAttribute('aria-label', 'Rename chat');
+    row.insertBefore(input, ren || del || null);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      if (save) renameConv(id, input.value);
+      else renderSidebar();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
   }
 
   /* ---------- thread rendering ---------- */
@@ -647,7 +711,15 @@
 
   els.list.addEventListener('click', (e) => {
     const row = e.target.closest('.conv'); if (!row) return;
-    if (e.target.closest('[data-del]')) deleteConv(row.dataset.id); else openConv(row.dataset.id);
+    if (e.target.closest('[data-del]')) { deleteConv(row.dataset.id); return; }
+    if (e.target.closest('[data-ren]')) { startRename(row.dataset.id); return; }
+    openConv(row.dataset.id);
+  });
+  els.list.addEventListener('dblclick', (e) => {
+    const main = e.target.closest('.conv-main');
+    if (!main) return;
+    const row = main.closest('.conv');
+    if (row) startRename(row.dataset.id);
   });
   els.q.addEventListener('input', renderSidebar);
   $('#newChat').addEventListener('click', newChat);
