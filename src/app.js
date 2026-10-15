@@ -5,7 +5,7 @@
     base: $('#base'), refresh: $('#refresh'), thread: $('#thread'), scroll: $('#scroll'), input: $('#input'),
     send: $('#send'), attach: $('#attach'), file: $('#file'), pending: $('#pending'), composer: $('#composer'),
     list: $('#list'), q: $('#q'), banner: $('#banner'), dlg: $('#settings'), seg: $('#themeSeg'),
-    mic: $('#mic')
+    mic: $('#mic'), thinkBtn: $('#thinkBtn')
   };
   const ICON = {
     up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
@@ -15,16 +15,23 @@
     regen: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
     pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     mic: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
-    micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
+    micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    thinkOn: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z"/></svg>',
+    thinkOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>'
   };
-
-  const state = { models: [], model: '', convs: [], cur: null, pending: [], busy: false, abort: null, vision: null };
 
   /* ---------- storage ---------- */
   const store = {
     get(k, d) { try { const v = localStorage.getItem('llamadesk.' + k); return v === null ? d : v; } catch { return d; } },
     set(k, v) { try { localStorage.setItem('llamadesk.' + k, v); return true; } catch { return false; } }
   };
+
+  const state = {
+    models: [], model: '', convs: [], cur: null, pending: [], busy: false, abort: null,
+    vision: null, thinking: null,
+    thinkEnabled: store.get('think', '1') !== '0'
+  };
+
   function persist() {
     const data = state.convs.map((c) => ({
       id: c.id, title: c.title, updated: c.updated,
@@ -165,21 +172,53 @@
       renderModels();
       setStatus('ok', 'Connected · ' + names.length + (names.length === 1 ? ' model' : ' models'));
       showBanner('');
-      checkVision();
+      checkCapabilities();
     } catch {
       state.models = []; state.model = ''; renderModels();
       setStatus('bad', 'Can\u2019t reach Ollama');
       showBanner('Can\u2019t reach Ollama at ' + base() + '. Start it with "ollama serve", or fix the address in Settings.');
     }
   }
-  async function checkVision() {
+
+  async function checkCapabilities() {
     state.vision = null;
-    const model = state.model; if (!model) return;
+    state.thinking = null;
+    const model = state.model;
+    if (!model) {
+      updateThinkBtn();
+      return;
+    }
     try {
-      const r = await fetch(base() + '/api/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) });
+      const r = await fetch(base() + '/api/show', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model })
+      });
       const j = await r.json();
-      if (Array.isArray(j.capabilities)) state.vision = j.capabilities.includes('vision');
+      if (Array.isArray(j.capabilities)) {
+        state.vision = j.capabilities.includes('vision');
+        state.thinking = j.capabilities.includes('thinking');
+      }
+      // Newer Ollama also exposes a top-level "thinking" object
+      if (j.thinking && typeof j.thinking === 'object') {
+        state.thinking = true;
+      }
     } catch {}
+    updateThinkBtn();
+  }
+
+  function updateThinkBtn() {
+    if (!els.thinkBtn) return;
+    const show = !!state.thinking;
+    els.thinkBtn.hidden = !show;
+    if (!show) return;
+
+    const on = state.thinkEnabled;
+    els.thinkBtn.classList.toggle('active', on);
+    els.thinkBtn.innerHTML = on ? ICON.thinkOn : ICON.thinkOff;
+    els.thinkBtn.title = on ? 'Thinking on (click to disable)' : 'Thinking off (click to enable)';
+    els.thinkBtn.setAttribute('aria-label', els.thinkBtn.title);
+    els.thinkBtn.setAttribute('aria-pressed', String(on));
   }
 
   /* ---------- attachments ---------- */
@@ -643,9 +682,20 @@
     state.busy = true; state.abort = new AbortController(); updateSend();
     const t0 = performance.now();
     try {
+      const body = {
+        model,
+        messages: payload,
+        stream: true,
+        options: { temperature: parseFloat(els.temp.value) }
+      };
+      // Only send the parameter when the model supports thinking
+      if (state.thinking) {
+        body.think = state.thinkEnabled;
+      }
+
       const res = await fetch(base() + '/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: state.abort.signal,
-        body: JSON.stringify({ model, messages: payload, stream: true, options: { temperature: parseFloat(els.temp.value) } })
+        body: JSON.stringify(body)
       });
       if (!res.ok) { let d = ''; try { d = (await res.json()).error || ''; } catch {} throw new Error(d || 'Ollama returned HTTP ' + res.status); }
       const reader = res.body.getReader(), dec = new TextDecoder();
@@ -764,7 +814,7 @@
   els.ddBtn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openDd(); } });
   els.ddMenu.addEventListener('click', (e) => {
     const it = e.target.closest('.dd-item'); if (!it) return;
-    state.model = it.dataset.name; store.set('model', state.model); renderModels(); closeDd(true); checkVision();
+    state.model = it.dataset.name; store.set('model', state.model); renderModels(); closeDd(true); checkCapabilities();
   });
   els.ddMenu.addEventListener('keydown', (e) => {
     const items = Array.from(els.ddMenu.querySelectorAll('.dd-item')); if (!items.length) return;
@@ -777,6 +827,16 @@
     else if (e.key === 'Tab') closeDd();
   });
   document.addEventListener('click', (e) => { if (!els.dd.contains(e.target)) closeDd(); });
+
+  // Think toggle
+  if (els.thinkBtn) {
+    els.thinkBtn.addEventListener('click', () => {
+      state.thinkEnabled = !state.thinkEnabled;
+      store.set('think', state.thinkEnabled ? '1' : '0');
+      updateThinkBtn();
+    });
+  }
+
   $('#openSettings').addEventListener('click', () => els.dlg.showModal());
   $('#closeSettings').addEventListener('click', () => els.dlg.close());
   els.dlg.addEventListener('click', (e) => { if (e.target === els.dlg) els.dlg.close(); });

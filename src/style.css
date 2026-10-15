@@ -304,6 +304,21 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 }
 .scrim { display: none; }
 
+/* Think toggle */
+.think-btn.active {
+  color: var(--link);
+  background: color-mix(in srgb, var(--link) 16%, transparent);
+}
+.think-btn:not(.active) {
+  color: var(--muted);
+  opacity: 0.75;
+}
+.think-btn:hover {
+  color: var(--ink);
+  background: var(--hover);
+  opacity: 1;
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 800px) {
   .app, body.side-collapsed .app { grid-template-columns: 1fr; }
