@@ -285,6 +285,7 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
   width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 14px; color: var(--ink);
 }
 .field textarea { resize: vertical; min-height: 90px; }
+.field-hint { margin: 0; font-size: 12px; color: var(--muted); opacity: 0.85; line-height: 1.4; }
 input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; }
 input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: var(--line); }
 input[type=range]::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line); }

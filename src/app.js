@@ -850,5 +850,140 @@
     state.convs = []; persist(); newChat(); els.dlg.close();
   });
 
+  /* ---------- export / import chats (JSON) ---------- */
+  function exportChats() {
+    const chats = state.convs
+      .filter((c) => c.messages && c.messages.length)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        updated: c.updated,
+        messages: c.messages.map((m) => ({
+          role: m.role,
+          content: m.content || '',
+          files: m.files || [],
+          imageCount: m.imageCount || (m.images ? m.images.length : 0)
+        }))
+      }));
+
+    if (!chats.length) {
+      toast('No chats to export.');
+      return;
+    }
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      app: 'llamadesk',
+      chats
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'llamadesk-chats-' + date + '.json';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Exported ' + chats.length + (chats.length === 1 ? ' chat.' : ' chats.'));
+  }
+
+  function normalizeImportedChat(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const messages = Array.isArray(raw.messages) ? raw.messages : [];
+    const cleanMsgs = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof (m.content || '') === 'string')
+      .map((m) => ({
+        role: m.role,
+        content: String(m.content || ''),
+        files: Array.isArray(m.files) ? m.files.filter((f) => f && typeof f.name === 'string' && typeof f.text === 'string') : [],
+        imageCount: typeof m.imageCount === 'number' ? m.imageCount : 0
+      }));
+    if (!cleanMsgs.length) return null;
+
+    const id = (typeof raw.id === 'string' && raw.id) ? raw.id : (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    let title = (typeof raw.title === 'string' && raw.title.trim()) ? raw.title.trim() : 'Imported chat';
+    if (title.length > 80) title = title.slice(0, 80).trim();
+    const updated = typeof raw.updated === 'number' ? raw.updated : Date.now();
+
+    return { id, title, updated, messages: cleanMsgs };
+  }
+
+  function doImport(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        let list = [];
+        if (Array.isArray(data)) list = data;
+        else if (data && typeof data === 'object' && Array.isArray(data.chats)) list = data.chats;
+        else throw new Error('Invalid file format. Expected a llamaDesk export JSON.');
+
+        const imported = [];
+        for (const item of list) {
+          const c = normalizeImportedChat(item);
+          if (c) imported.push(c);
+        }
+        if (!imported.length) throw new Error('No valid chats found in the file.');
+
+        const merge = confirm(
+          'Found ' + imported.length + (imported.length === 1 ? ' chat' : ' chats') + '.\n\n' +
+          'OK = Merge with your existing chats\n' +
+          'Cancel = Abort import'
+        );
+        if (!merge) return;
+
+        let replaced = false;
+        if (state.convs.some((c) => c.messages && c.messages.length)) {
+          replaced = confirm(
+            'Also replace all existing chats?\n\n' +
+            'OK = Replace everything with the imported chats\n' +
+            'Cancel = Keep existing chats and add the imported ones'
+          );
+        }
+
+        if (replaced) {
+          state.convs = imported;
+        } else {
+          const existingIds = new Set(state.convs.map((c) => c.id));
+          for (const c of imported) {
+            if (existingIds.has(c.id)) {
+              c.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            }
+            existingIds.add(c.id);
+            state.convs.push(c);
+          }
+        }
+
+        persist();
+        state.cur = null;
+        newChat();
+        renderSidebar();
+        els.dlg.close();
+        toast(
+          (replaced ? 'Replaced with ' : 'Imported ') +
+          imported.length +
+          (imported.length === 1 ? ' chat.' : ' chats.')
+        );
+      } catch (e) {
+        toast(e.message || 'Could not import file.');
+      }
+    };
+    reader.onerror = () => toast('Could not read the selected file.');
+    reader.readAsText(file);
+  }
+
+  $('#exportChats').addEventListener('click', exportChats);
+  $('#importChats').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', () => {
+    const f = $('#importFile').files && $('#importFile').files[0];
+    $('#importFile').value = '';
+    if (f) doImport(f);
+  });
+
   setMode(); renderSidebar(); updateSend(); loadModels();
 })();

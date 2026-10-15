@@ -17,6 +17,7 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
 - **Copy** (rendered reply, without the Reasoning block) and **Regenerate** on every reply
 - **Settings** for system prompt, temperature, Ollama address, and theme
+- **Export / import chats** as JSON (from Settings — merge or replace)
 - **Responsive layout** with collapsible sidebar
 
 ## Requirements
@@ -271,8 +272,8 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 
 ## Roadmap ideas
 
-- Export / import chats
-- Rename chats and edit sent messages
+- ~~Export / import chats~~ (done — Settings → Export / Import as JSON)
+- Rename chats and edit sent messages *(rename already supported)*
 - Temporary (non-persistent) chat mode
 - In-app PDF text extraction
 - Per-chat system prompts
