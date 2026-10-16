@@ -5,7 +5,9 @@
     base: $('#base'), refresh: $('#refresh'), thread: $('#thread'), scroll: $('#scroll'), input: $('#input'),
     send: $('#send'), attach: $('#attach'), file: $('#file'), pending: $('#pending'), composer: $('#composer'),
     list: $('#list'), q: $('#q'), banner: $('#banner'), dlg: $('#settings'), seg: $('#themeSeg'),
-    mic: $('#mic'), thinkBtn: $('#thinkBtn')
+    mic: $('#mic'), thinkBtn: $('#thinkBtn'),
+    topMeta: $('#topMeta'), tempBadge: $('#tempBadge'),
+    pullName: $('#pullName'), pullModel: $('#pullModel'), pullProgress: $('#pullProgress'), modelManageList: $('#modelManageList')
   };
   const ICON = {
     up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
@@ -33,16 +35,23 @@
   };
 
   function persist() {
-    const data = state.convs.map((c) => ({
-      id: c.id, title: c.title, updated: c.updated,
-      messages: c.messages.map((m) => ({
-        role: m.role, content: m.content, files: m.files || [],
-        imageCount: m.imageCount || (m.images ? m.images.length : 0)
-      }))
-    }));
+    const data = state.convs
+      .filter((c) => !c.temporary)
+      .map((c) => ({
+        id: c.id, title: c.title, updated: c.updated,
+        messages: c.messages.map((m) => ({
+          role: m.role, content: m.content, files: m.files || [],
+          imageCount: m.imageCount || (m.images ? m.images.length : 0)
+        }))
+      }));
     if (!store.set('convs', JSON.stringify(data))) toast('Couldn\u2019t save chat history. Browser storage may be full or disabled.');
   }
-  try { state.convs = JSON.parse(store.get('convs', '[]')); } catch { state.convs = []; }
+  try {
+    state.convs = JSON.parse(store.get('convs', '[]')).map((c) => ({
+      ...c,
+      temporary: false
+    }));
+  } catch { state.convs = []; }
 
   els.base.value = store.get('base', 'http://localhost:11434');
   els.system.value = store.get('system', '');
@@ -199,12 +208,19 @@
         state.vision = j.capabilities.includes('vision');
         state.thinking = j.capabilities.includes('thinking');
       }
-      // Newer Ollama also exposes a top-level "thinking" object
       if (j.thinking && typeof j.thinking === 'object') {
         state.thinking = true;
       }
     } catch {}
     updateThinkBtn();
+    renderModelManageList();
+  }
+
+  function updateTopMeta() {
+    if (!els.topMeta) return;
+    const show = !!(state.cur && state.cur.temporary);
+    els.topMeta.hidden = !show;
+    if (els.tempBadge) els.tempBadge.hidden = !show;
   }
 
   function updateThinkBtn() {
@@ -414,29 +430,43 @@
 
   initStt();
   
-  function setMode() { els.main.classList.toggle('empty', msgs().length === 0); }
+  function setMode() {
+    els.main.classList.toggle('empty', msgs().length === 0);
+    updateTopMeta();
+  }
+  function makeConv(opts) {
+    return {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      title: opts.temporary ? 'Temporary chat' : 'New chat',
+      messages: [],
+      updated: Date.now(),
+      temporary: !!opts.temporary
+    };
+  }
   function ensureConv() {
     if (state.cur) return;
-    state.cur = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: 'New chat', messages: [], updated: Date.now() };
+    state.cur = makeConv({ temporary: false });
     state.convs.unshift(state.cur);
   }
   function renderSidebar() {
     const q = els.q.value.trim().toLowerCase();
     els.list.innerHTML = '';
-    const items = state.convs.filter((c) => c.messages.length && (!q || c.title.toLowerCase().includes(q))).sort((a, b) => b.updated - a.updated);
+    const items = state.convs
+      .filter((c) => (c.messages.length || c.temporary) && (!q || c.title.toLowerCase().includes(q) || (c.temporary && 'temporary'.includes(q))))
+      .sort((a, b) => b.updated - a.updated);
     if (!items.length) {
       const n = document.createElement('div'); n.className = 'list-note';
       n.textContent = q ? 'No matching chats' : 'Your chats will appear here'; els.list.appendChild(n); return;
     }
     items.forEach((c) => {
       const row = document.createElement('div');
-      row.className = 'conv' + (state.cur && state.cur.id === c.id ? ' active' : '');
+      row.className = 'conv' + (state.cur && state.cur.id === c.id ? ' active' : '') + (c.temporary ? ' temp' : '');
       row.dataset.id = c.id;
 
       const b = document.createElement('button');
       b.className = 'conv-main';
       b.textContent = c.title;
-      b.title = c.title;
+      b.title = c.temporary ? (c.title + ' (temporary — not saved)') : c.title;
 
       const ren = document.createElement('button');
       ren.className = 'conv-ren';
@@ -460,9 +490,23 @@
     stopIfBusy(); state.cur = null; state.pending = []; renderPending();
     els.thread.innerHTML = ''; setMode(); renderSidebar(); closeDrawer(); els.input.focus();
   }
+  function newTempChat() {
+    stopIfBusy();
+    state.cur = makeConv({ temporary: true });
+    state.convs.unshift(state.cur);
+    state.pending = [];
+    renderPending();
+    els.thread.innerHTML = '';
+    setMode();
+    renderSidebar();
+    closeDrawer();
+    els.input.focus();
+    toast('Temporary chat — not saved to history.');
+  }
   function openConv(id) {
     const c = state.convs.find((x) => x.id === id); if (!c) return;
-    stopIfBusy(); state.cur = c; renderThread(); setMode(); renderSidebar(); closeDrawer();
+    stopIfBusy(); state.cur = c;
+    renderThread(); setMode(); renderSidebar(); closeDrawer();
   }
   function deleteConv(id) {
     state.convs = state.convs.filter((c) => c.id !== id);
@@ -515,8 +559,9 @@
   }
 
   /* ---------- thread rendering ---------- */
-  function addUserEl(m) {
+  function addUserEl(m, msgIndex) {
     const w = document.createElement('div'); w.className = 'msg user';
+    w.dataset.msgIndex = String(msgIndex);
     const b = document.createElement('div'); b.className = 'bubble';
     const previews = m.previews || [], files = m.files || [];
     const missing = Math.max(0, (m.imageCount || 0) - previews.length);
@@ -528,7 +573,68 @@
       b.appendChild(row);
     }
     if (m.content) b.appendChild(document.createTextNode(m.content));
-    w.appendChild(b); els.thread.appendChild(w);
+    const actions = document.createElement('div');
+    actions.className = 'user-actions';
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'icon-btn';
+    editBtn.innerHTML = ICON.pencil;
+    editBtn.title = 'Edit message';
+    editBtn.setAttribute('aria-label', 'Edit message');
+    editBtn.dataset.editMsg = '1';
+    actions.appendChild(editBtn);
+    w.append(b, actions);
+    els.thread.appendChild(w);
+  }
+
+  function startEditUserMessage(msgIndex) {
+    if (state.busy || !state.cur) return;
+    const ms = state.cur.messages;
+    if (msgIndex < 0 || msgIndex >= ms.length || ms[msgIndex].role !== 'user') return;
+    const m = ms[msgIndex];
+    const row = els.thread.querySelector('.msg.user[data-msg-index="' + msgIndex + '"]');
+    if (!row || row.querySelector('.msg-edit-wrap')) return;
+
+    row.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-edit-wrap';
+    const ta = document.createElement('textarea');
+    ta.value = m.content || '';
+    ta.setAttribute('aria-label', 'Edit message');
+    const actions = document.createElement('div');
+    actions.className = 'msg-edit-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'btn'; cancel.textContent = 'Cancel';
+    const save = document.createElement('button');
+    save.type = 'button'; save.className = 'btn'; save.textContent = 'Save & regenerate';
+    actions.append(cancel, save);
+    wrap.append(ta, actions);
+    row.appendChild(wrap);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    cancel.onclick = () => { renderThread(); };
+    save.onclick = () => {
+      const text = ta.value.trim();
+      if (!text && !(m.files && m.files.length) && !(m.imageCount)) {
+        toast('Message cannot be empty.');
+        return;
+      }
+      m.content = text;
+      // Truncate conversation after this user message
+      state.cur.messages = ms.slice(0, msgIndex + 1);
+      state.cur.updated = Date.now();
+      persist();
+      renderThread();
+      setMode();
+      renderSidebar();
+      nearBottom = true;
+      generate();
+    };
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save.click(); }
+    });
   }
   function addAssistantEl(m) {
     const w = document.createElement('div'); w.className = 'msg assistant';
@@ -570,8 +676,8 @@
   }
   function renderThread() {
     els.thread.innerHTML = '';
-    msgs().forEach((m) => {
-      if (m.role === 'user') addUserEl(m);
+    msgs().forEach((m, i) => {
+      if (m.role === 'user') addUserEl(m, i);
       else { const r = { content: m.content, thinking: '' }; addAssistantEl(r); paint(r, true); finishAssistant(r); }
     });
     nearBottom = true; els.scroll.scrollTop = els.scroll.scrollHeight;
@@ -650,11 +756,11 @@
       files: state.pending.filter((a) => a.kind === 'text').map((a) => ({ name: a.name, text: a.text }))
     };
     if (!state.cur.messages.length) {
-      const t = text || (user.files[0] && user.files[0].name) || 'Image chat';
+      const t = text || (user.files[0] && user.files[0].name) || (state.cur.temporary ? 'Temporary chat' : 'Image chat');
       state.cur.title = t.length > 48 ? t.slice(0, 48).trim() + '…' : t;
     }
     state.cur.messages.push(user); state.cur.updated = Date.now();
-    setMode(); addUserEl(user); renderSidebar();
+    setMode(); addUserEl(user, state.cur.messages.length - 1); renderSidebar();
     els.input.value = ''; autoGrow(); state.pending = []; renderPending();
     nearBottom = true; generate();
   }
@@ -669,7 +775,9 @@
   }
 
   async function generate() {
-    const conv = state.cur, model = state.model;
+    const conv = state.cur;
+    const model = state.model;
+    if (!model) { toast('No model selected.'); return; }
     const reply = { content: '', thinking: '' };
     addAssistantEl(reply); paint(reply, false);
     els.scroll.scrollTop = els.scroll.scrollHeight;
@@ -686,9 +794,8 @@
         model,
         messages: payload,
         stream: true,
-        options: { temperature: parseFloat(els.temp.value) }
+        options: { temperature: parseFloat(els.temp.value) || 0.7 }
       };
-      // Only send the parameter when the model supports thinking
       if (state.thinking) {
         body.think = state.thinkEnabled;
       }
@@ -728,7 +835,9 @@
       }
     } finally {
       if (reply.content) conv.messages.push({ role: 'assistant', content: reply.content });
-      conv.updated = Date.now(); persist(); renderSidebar();
+      conv.updated = Date.now();
+      persist();
+      renderSidebar();
       finishAssistant(reply);
       state.busy = false; state.abort = null; updateSend();
     }
@@ -774,6 +883,16 @@
   els.q.addEventListener('input', renderSidebar);
   $('#newChat').addEventListener('click', newChat);
   $('#newChatTop').addEventListener('click', newChat);
+  if ($('#newTempChat')) $('#newTempChat').addEventListener('click', newTempChat);
+
+  els.thread.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-edit-msg]');
+    if (!editBtn) return;
+    const row = editBtn.closest('.msg.user');
+    if (!row) return;
+    const idx = parseInt(row.dataset.msgIndex, 10);
+    if (!isNaN(idx)) startEditUserMessage(idx);
+  });
 
   const mobile = () => window.matchMedia('(max-width: 800px)').matches;
   function closeDrawer() { document.body.classList.remove('menu-open'); }
@@ -814,7 +933,9 @@
   els.ddBtn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openDd(); } });
   els.ddMenu.addEventListener('click', (e) => {
     const it = e.target.closest('.dd-item'); if (!it) return;
-    state.model = it.dataset.name; store.set('model', state.model); renderModels(); closeDd(true); checkCapabilities();
+    state.model = it.dataset.name;
+    store.set('model', state.model);
+    renderModels(); closeDd(true); checkCapabilities();
   });
   els.ddMenu.addEventListener('keydown', (e) => {
     const items = Array.from(els.ddMenu.querySelectorAll('.dd-item')); if (!items.length) return;
@@ -844,16 +965,136 @@
   els.temp.addEventListener('input', () => { els.tval.textContent = els.temp.value; store.set('temp', els.temp.value); });
   els.base.addEventListener('change', () => { store.set('base', els.base.value); loadModels(); });
   els.seg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setTheme(b.dataset.v); });
-  els.refresh.addEventListener('click', loadModels);
+  els.refresh.addEventListener('click', () => { loadModels(); renderModelManageList(); });
   $('#wipe').addEventListener('click', () => {
     if (!confirm('Delete all saved chats? This can\u2019t be undone.')) return;
-    state.convs = []; persist(); newChat(); els.dlg.close();
+    state.convs = state.convs.filter((c) => c.temporary);
+    persist(); newChat(); els.dlg.close();
   });
+
+  /* ---------- model management (pull / delete) ---------- */
+  function renderModelManageList() {
+    if (!els.modelManageList) return;
+    els.modelManageList.innerHTML = '';
+    if (!state.models.length) {
+      const n = document.createElement('div');
+      n.className = 'field-hint';
+      n.textContent = 'No models installed.';
+      els.modelManageList.appendChild(n);
+      return;
+    }
+    state.models.forEach((m) => {
+      const row = document.createElement('div');
+      row.className = 'model-row';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = m.name;
+      name.title = m.name;
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = m.size ? (m.size / 1e9).toFixed(1) + ' GB' : '';
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'del-model';
+      del.textContent = '×';
+      del.title = 'Delete ' + m.name;
+      del.setAttribute('aria-label', 'Delete ' + m.name);
+      del.onclick = () => deleteModel(m.name);
+      row.append(name, sub, del);
+      els.modelManageList.appendChild(row);
+    });
+  }
+
+  async function pullModel() {
+    const name = (els.pullName && els.pullName.value.trim()) || '';
+    if (!name) { toast('Enter a model name to pull.'); return; }
+    if (els.pullModel) els.pullModel.disabled = true;
+    if (els.pullProgress) {
+      els.pullProgress.hidden = false;
+      els.pullProgress.textContent = 'Pulling ' + name + '…';
+    }
+    try {
+      const res = await fetch(base() + '/api/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, stream: true })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line) continue;
+          try {
+            const j = JSON.parse(line);
+            if (j.error) throw new Error(j.error);
+            if (els.pullProgress) {
+              if (j.status) {
+                let msg = j.status;
+                if (j.completed && j.total) {
+                  msg += ' · ' + Math.round((j.completed / j.total) * 100) + '%';
+                }
+                els.pullProgress.textContent = msg;
+              }
+            }
+          } catch (e) {
+            if (e.message && !/JSON/.test(e.message)) throw e;
+          }
+        }
+      }
+      toast('Pulled ' + name);
+      if (els.pullName) els.pullName.value = '';
+      await loadModels();
+      renderModelManageList();
+    } catch (e) {
+      toast('Pull failed: ' + (e.message || e));
+    } finally {
+      if (els.pullModel) els.pullModel.disabled = false;
+      if (els.pullProgress) {
+        setTimeout(() => { els.pullProgress.hidden = true; }, 2000);
+      }
+    }
+  }
+
+  async function deleteModel(name) {
+    if (!confirm('Delete model "' + name + '" from Ollama? This cannot be undone.')) return;
+    try {
+      const res = await fetch(base() + '/api/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (!res.ok) {
+        let d = '';
+        try { d = (await res.json()).error || ''; } catch {}
+        throw new Error(d || 'HTTP ' + res.status);
+      }
+      toast('Deleted ' + name);
+      if (state.model === name) state.model = '';
+      await loadModels();
+      renderModelManageList();
+    } catch (e) {
+      toast('Delete failed: ' + (e.message || e));
+    }
+  }
+
+  if (els.pullModel) els.pullModel.addEventListener('click', pullModel);
+  if (els.pullName) {
+    els.pullName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); pullModel(); }
+    });
+  }
 
   /* ---------- export / import chats (JSON) ---------- */
   function exportChats() {
     const chats = state.convs
-      .filter((c) => c.messages && c.messages.length)
+      .filter((c) => !c.temporary && c.messages && c.messages.length)
       .map((c) => ({
         id: c.id,
         title: c.title,
@@ -910,7 +1151,7 @@
     if (title.length > 80) title = title.slice(0, 80).trim();
     const updated = typeof raw.updated === 'number' ? raw.updated : Date.now();
 
-    return { id, title, updated, messages: cleanMsgs };
+    return { id, title, updated, temporary: false, messages: cleanMsgs };
   }
 
   function doImport(file) {
