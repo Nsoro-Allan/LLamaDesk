@@ -238,6 +238,11 @@
   }
 
   /* ---------- attachments ---------- */
+  const PDF_MAX_BYTES = 40 * 1024 * 1024; // 40 MB
+  const PDF_MAX_PAGES = 25;
+  const PDF_MAX_CHARS = 100000;
+  const PDF_MIN_TEXT_CHARS = 30; // below this → try OCR (likely scanned)
+
   function imageToBase64(file, max = 1280) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file), im = new Image();
@@ -254,19 +259,122 @@
       im.src = url;
     });
   }
+
+  function isPdfFile(f) {
+    const name = (f.name || '').toLowerCase();
+    return f.type === 'application/pdf' || name.endsWith('.pdf');
+  }
+
+  function ensurePdfJs() {
+    const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'] || null;
+    if (!lib) throw new Error('PDF engine not loaded. Check vendor/pdf.min.js.');
+    if (lib.GlobalWorkerOptions) {
+      lib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+    }
+    return lib;
+  }
+
+  async function extractTextLayerFromPdf(pdf, maxPages) {
+    const n = Math.min(pdf.numPages, maxPages);
+    const parts = [];
+    for (let i = 1; i <= n; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((it) => (it && it.str) || '').join(' ');
+      if (pageText.trim()) parts.push(pageText.trim());
+    }
+    return parts.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  async function renderPdfPageToCanvas(page, scale) {
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas;
+  }
+
+  async function ocrPdfPages(pdf, maxPages, onProgress) {
+    if (!window.Tesseract || !window.Tesseract.recognize) {
+      throw new Error('OCR engine not loaded. Check vendor/tesseract.min.js.');
+    }
+    const n = Math.min(pdf.numPages, maxPages);
+    const parts = [];
+    // First OCR may download language data (~few MB) via CDN; later runs can use cache.
+    for (let i = 1; i <= n; i++) {
+      if (onProgress) onProgress(i, n);
+      const page = await pdf.getPage(i);
+      // 1.5–2.0 scale improves OCR accuracy without huge memory use
+      const canvas = await renderPdfPageToCanvas(page, 1.75);
+      const result = await window.Tesseract.recognize(canvas, 'eng', {
+        logger: () => {}
+      });
+      const text = (result && result.data && result.data.text) || '';
+      if (text.trim()) parts.push(text.trim());
+      // free canvas memory
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  async function extractPdf(file) {
+    if (file.size > PDF_MAX_BYTES) {
+      throw new Error(file.name + ' is over 40 MB. Use a smaller PDF or an excerpt.');
+    }
+    const pdfjs = ensurePdfJs();
+    const buf = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({ data: buf });
+    const pdf = await loadingTask.promise;
+    const pageCount = pdf.numPages;
+    const pagesToRead = Math.min(pageCount, PDF_MAX_PAGES);
+
+    toast('Reading PDF' + (pageCount > PDF_MAX_PAGES ? ' (first ' + PDF_MAX_PAGES + ' pages)' : '') + '…');
+
+    let text = await extractTextLayerFromPdf(pdf, pagesToRead);
+    let method = 'text';
+
+    // Scanned / image-only PDFs often yield almost no text layer
+    if (text.length < PDF_MIN_TEXT_CHARS) {
+      toast('Scanned PDF detected — running OCR (first use may download language data)…');
+      text = await ocrPdfPages(pdf, pagesToRead, (i, n) => {
+        toast('OCR page ' + i + ' / ' + n + '…');
+      });
+      method = 'ocr';
+    }
+
+    if (!text || text.length < 3) {
+      throw new Error('No text could be extracted from ' + file.name + '.');
+    }
+
+    if (text.length > PDF_MAX_CHARS) {
+      text = text.slice(0, PDF_MAX_CHARS) + '\n\n[…truncated for length]';
+    }
+
+    const note = method === 'ocr' ? ' (OCR)' : '';
+    const pageNote = pageCount > PDF_MAX_PAGES ? ', first ' + PDF_MAX_PAGES + ' pages' : '';
+    toast('Extracted text from ' + file.name + note + pageNote + '.');
+    return text;
+  }
+
   async function addFiles(list) {
     for (const f of Array.from(list)) {
       try {
         if (f.type.startsWith('image/')) {
           const { b64, preview } = await imageToBase64(f);
           state.pending.push({ kind: 'image', name: f.name || 'image', b64, preview });
+        } else if (isPdfFile(f)) {
+          const text = await extractPdf(f);
+          state.pending.push({ kind: 'text', name: f.name || 'document.pdf', text });
         } else {
           if (f.size > 400 * 1024) { toast(f.name + ' is over 400 KB. Attach a smaller file or an excerpt.'); continue; }
           const text = await f.text();
-          if (text.includes('\u0000')) { toast(f.name + ' isn\u2019t plain text. Convert it first (for PDFs, use pdftotext).'); continue; }
+          if (text.includes('\u0000')) { toast(f.name + ' isn\u2019t plain text. For PDFs, attach the .pdf file directly.'); continue; }
           state.pending.push({ kind: 'text', name: f.name, text });
         }
-      } catch (e) { toast(e.message); }
+      } catch (e) { toast(e.message || String(e)); }
     }
     renderPending();
   }

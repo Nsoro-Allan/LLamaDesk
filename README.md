@@ -11,6 +11,7 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Voice input** (push-to-talk) powered by on-device Whisper via `tauri-plugin-stt` — works offline after a one-time model download
 - **Image input** for vision models (attach, drag & drop, or paste)
 - **Text and code file input** (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.js`, and more)
+- **PDF text extraction** — text-layer PDFs via PDF.js; scanned PDFs via OCR (Tesseract) fallback
 - **Chat history** saved locally, with search and per-chat delete
 - **Custom model picker** that lists every model installed in Ollama
 - **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, and headings
@@ -142,7 +143,11 @@ This updates the files in `src-tauri/icons/`. Commit the generated icons so buil
 
 - **Images** are resized (max side 1280 px), converted to JPEG, and sent to Ollama. The selected model must support vision.
 - **Text files** up to 400 KB are inserted into the message as fenced blocks.
-- **PDFs / Office documents** are not read directly. Convert them to text first (e.g. `pdftotext`).
+- **PDFs** are extracted in-app:
+  - Text PDFs: embedded text via PDF.js
+  - Scanned / image PDFs: OCR via Tesseract.js (first OCR may download language data; later use is cached)
+  - Limits: 40 MB file size, first 25 pages, ~100k characters
+- **Office documents** (`.docx`, etc.) are not read directly — export to PDF or plain text first.
 
 ## Configuration
 
@@ -168,6 +173,10 @@ LLamaDesk/
 │   ├── highlight.min.js         # Code syntax highlighting
 │   ├── highlight-dark.css
 │   ├── highlight-light.css
+│   ├── vendor/                  # PDF.js + Tesseract.js (PDF extract / OCR)
+│   │   ├── pdf.min.js
+│   │   ├── pdf.worker.min.js
+│   │   └── tesseract.min.js
 │   └── Assets/
 │       └── favicon.png
 ├── src-tauri/                   # Tauri / Rust backend
@@ -281,7 +290,7 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - ~~In-app model pull / delete~~ ✅
 - Per-chat system prompts / model / temperature
 - Context / token awareness + summarize older
-- In-app PDF text extraction
+- ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support
 - Auto-updater
 - macOS builds (requires Apple Developer certificate)
