@@ -292,9 +292,45 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - Context / token awareness + summarize older
 - ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support
-- Auto-updater
+- ~~Auto-updater~~ ✅ (GitHub Releases + signed artifacts)
 - macOS builds (requires Apple Developer certificate)
 - Optional larger Whisper models in Settings
+
+## Auto-updates
+
+llamaDesk can update itself from [GitHub Releases](https://github.com/Nsoro-Allan/LLamaDesk/releases).
+
+### How it works
+
+1. On launch (and from **Settings → Check for updates**), the app requests `latest.json` from the latest GitHub Release.
+2. If a newer version exists, the user is prompted to **Download & install**.
+3. The installer is signature-checked with the public key in `src-tauri/tauri.conf.json`, then applied; the app restarts.
+
+### Maintainers: signing keys (required)
+
+Updates **must** be signed. Generate a keypair once:
+
+```bash
+npm run tauri signer generate -w ~/.tauri/llamadesk.key
+```
+
+- Put the **public** key string into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
+- Store the **private** key in the GitHub repo secret `TAURI_SIGNING_PRIVATE_KEY` (full key contents).
+- If you set a password on the key, also set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+The release workflow already passes these secrets into `tauri-action` and uploads updater artifacts (`.sig` files + `latest.json`).
+
+### Publishing a new update
+
+1. Bump `version` in `package.json` and `src-tauri/tauri.conf.json` (and `Cargo.toml` if you keep them in sync).
+2. Commit, tag, and push:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+3. Wait for the **Release** workflow to finish. Users on a signed build can then update in-app.
 
 ## License
 

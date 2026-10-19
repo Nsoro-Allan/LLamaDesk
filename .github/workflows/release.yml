@@ -1,5 +1,5 @@
 # .github/workflows/release.yml
-# Build and publish llamaDesk for Windows and Linux
+# Build and publish llamaDesk for Windows and Linux (with updater artifacts)
 
 name: Release
 
@@ -70,8 +70,10 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for signed updater artifacts (.sig + latest.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # Uses the pushed tag when available, otherwise the version from tauri.conf.json
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', '0.1.0') }}
           releaseName: LLamaDesk ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
           releaseBody: |
@@ -86,7 +88,10 @@ jobs:
             - [Ollama](https://ollama.com) must be installed and running
             - At least one model pulled (`ollama pull llama3.2`)
 
+            The app can check for updates automatically from this release (`latest.json`).
+
             See the [README](https://github.com/Nsoro-Allan/LLamaDesk#readme) for full documentation.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+          includeUpdaterJson: true

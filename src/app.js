@@ -7,7 +7,10 @@
     list: $('#list'), q: $('#q'), banner: $('#banner'), dlg: $('#settings'), seg: $('#themeSeg'),
     mic: $('#mic'), thinkBtn: $('#thinkBtn'),
     topMeta: $('#topMeta'), tempBadge: $('#tempBadge'),
-    pullName: $('#pullName'), pullModel: $('#pullModel'), pullProgress: $('#pullProgress'), modelManageList: $('#modelManageList')
+    pullName: $('#pullName'), pullModel: $('#pullModel'), pullProgress: $('#pullProgress'), modelManageList: $('#modelManageList'),
+    checkUpdate: $('#checkUpdate'), appVersion: $('#appVersion'), updateStatus: $('#updateStatus'),
+    updateDlg: $('#updateDlg'), updateDlgText: $('#updateDlgText'), updateDlgNotes: $('#updateDlgNotes'),
+    installUpdate: $('#installUpdate'), laterUpdate: $('#laterUpdate'), updateProgress: $('#updateProgress')
   };
   const ICON = {
     up: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
@@ -1333,6 +1336,149 @@
     $('#importFile').value = '';
     if (f) doImport(f);
   });
+
+
+  /* ---------- auto-updater (GitHub Releases + tauri-plugin-updater) ---------- */
+  let pendingUpdate = null;
+
+  function isTauri() {
+    return !!(window.__TAURI__ && window.__TAURI__.core);
+  }
+
+  async function getAppVersion() {
+    try {
+      if (window.__TAURI__ && window.__TAURI__.app && window.__TAURI__.app.getVersion) {
+        return await window.__TAURI__.app.getVersion();
+      }
+      // Tauri 2 core path
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        return await window.__TAURI__.core.invoke('plugin:app|version').catch(() => null)
+          || await window.__TAURI__.core.invoke('get_version').catch(() => null);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function checkForUpdate(opts) {
+    const silent = !!(opts && opts.silent);
+    if (!isTauri()) {
+      if (!silent && els.updateStatus) els.updateStatus.textContent = 'Updates are only available in the desktop app.';
+      if (!silent) toast('Open the desktop app to check for updates.');
+      return null;
+    }
+    if (els.updateStatus && !silent) els.updateStatus.textContent = 'Checking for updates…';
+    if (els.checkUpdate) els.checkUpdate.disabled = true;
+    try {
+      // Prefer plugin JS binding if present, else invoke
+      let update = null;
+      const inv = window.__TAURI__.core.invoke;
+      if (window.__TAURI__.updater && typeof window.__TAURI__.updater.check === 'function') {
+        update = await window.__TAURI__.updater.check();
+      } else {
+        update = await inv('plugin:updater|check');
+      }
+      if (!update) {
+        if (els.updateStatus) els.updateStatus.textContent = 'You are on the latest version.';
+        if (!silent) toast('You are on the latest version.');
+        return null;
+      }
+      pendingUpdate = update;
+      const ver = update.version || (update.rawJson && update.rawJson.version) || 'new version';
+      const notes = update.body || update.notes || '';
+      if (els.updateStatus) els.updateStatus.textContent = 'Update ' + ver + ' available.';
+      if (els.updateDlgText) {
+        els.updateDlgText.textContent = 'Version ' + ver + ' is available. Download and install now? The app will restart after installing.';
+      }
+      if (els.updateDlgNotes) {
+        if (notes) {
+          els.updateDlgNotes.hidden = false;
+          els.updateDlgNotes.textContent = notes;
+        } else {
+          els.updateDlgNotes.hidden = true;
+          els.updateDlgNotes.textContent = '';
+        }
+      }
+      if (els.updateProgress) els.updateProgress.hidden = true;
+      if (els.installUpdate) {
+        els.installUpdate.disabled = false;
+        els.installUpdate.textContent = 'Download & install';
+      }
+      if (els.updateDlg && typeof els.updateDlg.showModal === 'function') els.updateDlg.showModal();
+      else if (!silent) toast('Update ' + ver + ' available. Open Settings to install.');
+      return update;
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      // Common when no release / no network / missing signing config
+      if (els.updateStatus) els.updateStatus.textContent = 'Could not check for updates.';
+      if (!silent) toast('Update check failed: ' + msg);
+      return null;
+    } finally {
+      if (els.checkUpdate) els.checkUpdate.disabled = false;
+    }
+  }
+
+  async function installPendingUpdate() {
+    if (!pendingUpdate || !isTauri()) return;
+    const inv = window.__TAURI__.core.invoke;
+    if (els.installUpdate) {
+      els.installUpdate.disabled = true;
+      els.installUpdate.textContent = 'Installing…';
+    }
+    if (els.updateProgress) {
+      els.updateProgress.hidden = false;
+      els.updateProgress.textContent = 'Downloading update…';
+    }
+    try {
+      // downloadAndInstall on the update object (JS binding) or invoke
+      if (typeof pendingUpdate.downloadAndInstall === 'function') {
+        await pendingUpdate.downloadAndInstall((event) => {
+          if (!els.updateProgress) return;
+          const e = event || {};
+          if (e.event === 'Started') els.updateProgress.textContent = 'Download started…';
+          else if (e.event === 'Progress') {
+            const total = e.data && e.data.contentLength;
+            const chunk = e.data && e.data.chunkLength;
+            if (total) els.updateProgress.textContent = 'Downloading… ' + Math.min(99, Math.round((chunk / total) * 100)) + '%';
+            else els.updateProgress.textContent = 'Downloading…';
+          } else if (e.event === 'Finished') els.updateProgress.textContent = 'Installing…';
+        });
+      } else {
+        await inv('plugin:updater|download_and_install');
+      }
+      if (els.updateProgress) els.updateProgress.textContent = 'Restarting…';
+      // Relaunch
+      if (window.__TAURI__.process && typeof window.__TAURI__.process.relaunch === 'function') {
+        await window.__TAURI__.process.relaunch();
+      } else {
+        await inv('plugin:process|restart');
+      }
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      if (els.updateProgress) els.updateProgress.textContent = 'Update failed.';
+      toast('Update failed: ' + msg);
+      if (els.installUpdate) {
+        els.installUpdate.disabled = false;
+        els.installUpdate.textContent = 'Download & install';
+      }
+    }
+  }
+
+  if (els.checkUpdate) els.checkUpdate.addEventListener('click', () => checkForUpdate({ silent: false }));
+  if (els.installUpdate) els.installUpdate.addEventListener('click', installPendingUpdate);
+  if (els.laterUpdate) els.laterUpdate.addEventListener('click', () => els.updateDlg && els.updateDlg.close());
+  if ($('#closeUpdateDlg')) $('#closeUpdateDlg').addEventListener('click', () => els.updateDlg && els.updateDlg.close());
+  if (els.updateDlg) els.updateDlg.addEventListener('click', (e) => { if (e.target === els.updateDlg) els.updateDlg.close(); });
+
+  // Show version + silent update check shortly after launch
+  (async () => {
+    const v = await getAppVersion();
+    if (els.appVersion) els.appVersion.textContent = v ? ('v' + v) : '';
+    if (isTauri()) {
+      setTimeout(() => { checkForUpdate({ silent: true }); }, 4000);
+    } else if (els.updateStatus) {
+      els.updateStatus.textContent = 'Updates are only available in the desktop app.';
+    }
+  })();
 
   setMode(); renderSidebar(); updateSend(); loadModels();
 })();

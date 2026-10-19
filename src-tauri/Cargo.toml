@@ -1,6 +1,6 @@
 [package]
 name = "llamadesk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ollama Desktop GUI app."
 authors = ["Nsoro Allan"]
 edition = "2021"
@@ -19,10 +19,9 @@ tauri-plugin-stt = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Optional later for GPU:
-# tauri-plugin-stt = { version = "0.2", features = ["metal"] }   # macOS
-# tauri-plugin-stt = { version = "0.2", features = ["cuda"] }    # Windows NVIDIA
-# tauri-plugin-stt = { version = "0.2", features = ["vulkan"] }  # Linux
+[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [profile.release]
 codegen-units = 1

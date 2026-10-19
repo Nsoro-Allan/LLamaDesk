@@ -142,10 +142,36 @@
       </div>
       <p class="field-hint">Export or import all chats as a JSON file. On import you can merge or replace existing chats.</p>
     </div>
+    <div class="field">
+      <label>App updates</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="checkUpdate" type="button">Check for updates</button>
+        <span class="field-hint" id="appVersion" style="opacity:1"></span>
+      </div>
+      <p class="field-hint" id="updateStatus">Checks GitHub releases for a newer version.</p>
+    </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn" id="refresh">Reload models</button>
       <button class="btn danger" id="wipe">Delete all chats</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="updateDlg">
+  <div class="dlg-head">
+    <h2>Update available</h2>
+    <button class="icon-btn" id="closeUpdateDlg" aria-label="Close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="dlg-body">
+    <p id="updateDlgText" class="field-hint" style="opacity:1;font-size:14px;color:var(--ink)"></p>
+    <pre id="updateDlgNotes" class="update-notes" hidden></pre>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="installUpdate" type="button">Download & install</button>
+      <button class="btn" id="laterUpdate" type="button">Later</button>
+    </div>
+    <p class="field-hint" id="updateProgress" hidden></p>
   </div>
 </dialog>
 
