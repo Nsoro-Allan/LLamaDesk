@@ -37,12 +37,16 @@
   const CONTEXT_WARN_CHARS = 24000; // ~6k tokens rough warning threshold
   const CONTEXT_SUMMARIZE_KEEP = 4;  // keep last N messages after summarize
 
+  const MEMORY_MAX = 25; // hard cap on stored preference items
+
   const state = {
     models: [], model: '', convs: [], cur: null, pending: [], busy: false, abort: null,
     vision: null, thinking: null,
     thinkEnabled: store.get('think', '1') !== '0',
+    autoMemory: store.get('autoMemory', '0') === '1', // opt-in; off by default
     queue: [],          // message queue while generating
-    memory: []          // explicit user preferences
+    memory: [],         // user preferences (manual + optional auto)
+    memoryBusy: false   // background extraction in flight
   };
 
   function persist() {
@@ -61,6 +65,117 @@
   }
   function persistMemory() {
     store.set('memory', JSON.stringify(state.memory));
+  }
+  function setAutoMemory(on) {
+    state.autoMemory = !!on;
+    store.set('autoMemory', state.autoMemory ? '1' : '0');
+  }
+  function normalizeMemoryText(t) {
+    return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  }
+  function memoryExists(text) {
+    const key = text.toLowerCase();
+    return state.memory.some((m) => (m.text || '').toLowerCase() === key);
+  }
+  function addMemoryItem(text, source) {
+    const t = normalizeMemoryText(text);
+    if (!t || t.length < 8) return false;
+    if (memoryExists(t)) return false;
+    state.memory.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      text: t,
+      created: Date.now(),
+      source: source === 'auto' ? 'auto' : 'user'
+    });
+    // Keep newest preferences if over cap
+    if (state.memory.length > MEMORY_MAX) {
+      state.memory = state.memory.slice(state.memory.length - MEMORY_MAX);
+    }
+    persistMemory();
+    return true;
+  }
+
+  /**
+   * Opt-in automatic memory: after a reply, ask the local model to extract
+   * durable user preferences. Runs in the background; never blocks chat.
+   * Off by default — user must enable in Settings.
+   */
+  async function maybeRememberFromChat(conv) {
+    if (!state.autoMemory || state.memoryBusy || !conv || conv.temporary) return;
+    if (!state.model) return;
+    const ms = conv.messages || [];
+    if (ms.length < 2) return;
+
+    // Use the last user + assistant pair; skip tiny / continue-only turns
+    const lastUser = [...ms].reverse().find((m) => m.role === 'user');
+    const lastAsst = [...ms].reverse().find((m) => m.role === 'assistant');
+    if (!lastUser || !lastAsst) return;
+    const userText = (lastUser.content || '').trim();
+    if (userText.length < 24) return;
+    if (/^(continue\.?|go on\.?|keep going\.?|more\.?)$/i.test(userText)) return;
+
+    // Don't re-extract too often on the same chat (every ~2 user turns)
+    const userTurns = ms.filter((m) => m.role === 'user').length;
+    if (userTurns > 1 && userTurns % 2 === 1) return;
+
+    const existing = state.memory.map((m) => m.text).join('\n') || '(none)';
+    const excerpt =
+      'User: ' + userText.slice(0, 1200) + '\n\nAssistant: ' + (lastAsst.content || '').slice(0, 800);
+
+    const extractPrompt =
+      'You extract durable user preferences for a personal AI assistant.\n' +
+      'From the exchange below, return ONLY a JSON array of 0 to 3 short strings.\n' +
+      'Each string is one lasting preference about style, format, tone, language, or domain ' +
+      '(examples: "Prefer concise bullet-point answers", "I am a React developer", "Always show TypeScript examples").\n' +
+      'Do NOT invent preferences. Skip one-off requests, temporary tasks, and anything already listed.\n' +
+      'If nothing durable is clear, return [].\n' +
+      'No markdown, no explanation — JSON array only.\n\n' +
+      'Already remembered:\n' + existing + '\n\n' +
+      'Exchange:\n' + excerpt;
+
+    state.memoryBusy = true;
+    try {
+      const res = await fetch(base() + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: state.model,
+          stream: false,
+          messages: [
+            { role: 'system', content: 'You output only valid JSON arrays of short preference strings.' },
+            { role: 'user', content: extractPrompt }
+          ],
+          options: { temperature: 0.2 }
+        })
+      });
+      if (!res.ok) return;
+      const j = await res.json();
+      let raw = (j.message && j.message.content) || j.response || '';
+      raw = String(raw).trim();
+      // Strip optional markdown fences
+      const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence) raw = fence[1].trim();
+      const arrMatch = raw.match(/\[[\s\S]*\]/);
+      if (!arrMatch) return;
+      let items;
+      try { items = JSON.parse(arrMatch[0]); } catch { return; }
+      if (!Array.isArray(items) || !items.length) return;
+
+      const added = [];
+      items.forEach((it) => {
+        const text = typeof it === 'string' ? it : (it && it.text);
+        if (addMemoryItem(text, 'auto')) added.push(normalizeMemoryText(text));
+      });
+      if (added.length) {
+        toast('Remembered: ' + added[0] + (added.length > 1 ? ' (+' + (added.length - 1) + ')' : ''));
+        // Refresh list if settings is open
+        if (els.dlg && els.dlg.open) renderMemoryList();
+      }
+    } catch (_) {
+      // Silent — background feature must never interrupt chat
+    } finally {
+      state.memoryBusy = false;
+    }
   }
   try {
     state.convs = JSON.parse(store.get('convs', '[]')).map((c) => {
@@ -1224,6 +1339,10 @@
       finishAssistant(reply);
       state.busy = false; state.abort = null; updateSend();
       updateContextBanner();
+      // Opt-in automatic preference learning (background, non-blocking)
+      if (reply.content) {
+        try { maybeRememberFromChat(conv); } catch (_) {}
+      }
       drainQueue();
     }
   }
@@ -1348,6 +1467,8 @@
     const list = document.getElementById('memoryList');
     if (!list) return;
     list.innerHTML = '';
+    const autoToggle = document.getElementById('autoMemory');
+    if (autoToggle) autoToggle.checked = !!state.autoMemory;
     if (!state.memory.length) {
       const n = document.createElement('p');
       n.className = 'field-hint';
@@ -1360,6 +1481,12 @@
       row.className = 'memory-item';
       const span = document.createElement('span');
       span.textContent = m.text;
+      if (m.source === 'auto') {
+        const tag = document.createElement('em');
+        tag.className = 'memory-src';
+        tag.textContent = ' auto';
+        span.appendChild(tag);
+      }
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'icon-btn';
@@ -1380,12 +1507,10 @@
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
-    if (state.memory.some((m) => m.text.toLowerCase() === text.toLowerCase())) {
-      toast('Already in memory.');
+    if (!addMemoryItem(text, 'user')) {
+      toast('Already in memory or too short.');
       return;
     }
-    state.memory.push({ id: Date.now().toString(36), text, created: Date.now() });
-    persistMemory();
     input.value = '';
     renderMemoryList();
     toast('Memory saved.');
@@ -1399,6 +1524,27 @@
   if (memInput) memInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); addMemory(); }
   });
+  const autoMemEl = document.getElementById('autoMemory');
+  if (autoMemEl) {
+    autoMemEl.checked = !!state.autoMemory;
+    autoMemEl.addEventListener('change', () => {
+      setAutoMemory(autoMemEl.checked);
+      toast(autoMemEl.checked
+        ? 'Automatic memory on — preferences may be learned from chats (local only).'
+        : 'Automatic memory off.');
+    });
+  }
+  const memClear = document.getElementById('memoryClear');
+  if (memClear) {
+    memClear.addEventListener('click', () => {
+      if (!state.memory.length) return;
+      if (!confirm('Clear all memories? This cannot be undone.')) return;
+      state.memory = [];
+      persistMemory();
+      renderMemoryList();
+      toast('Memory cleared.');
+    });
+  }
   els.system.addEventListener('input', () => store.set('system', els.system.value));
   els.temp.addEventListener('input', () => { els.tval.textContent = els.temp.value; store.set('temp', els.temp.value); });
   els.base.addEventListener('change', () => { store.set('base', els.base.value); loadModels(); });

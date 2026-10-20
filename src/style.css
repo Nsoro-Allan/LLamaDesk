@@ -157,6 +157,7 @@ main.empty .composer-wrap { padding-bottom: 0; }
   background: var(--surface-2); border: 1px solid var(--line); font-size: 13px;
 }
 .memory-item span { flex: 1; min-width: 0; }
+.memory-src { color: var(--muted); font-style: normal; font-size: 11px; opacity: 0.85; }
 .composer {
   max-width: 760px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line);
   border-radius: 26px; padding: 14px 12px 10px 18px; transition: border-color .15s;
@@ -309,18 +310,71 @@ details.think div { margin-top: 8px; padding-left: 14px; border-left: 2px solid 
 /* ---------- settings dialog ---------- */
 dialog {
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 20px;
-  padding: 0; width: min(480px, 92vw);
+  padding: 0;
+  width: min(600px, 94vw);
+  max-width: 94vw;
+  max-height: 90vh;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 dialog::backdrop { background: rgba(0,0,0,.55); }
-.dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 4px; }
+.dlg-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 24px 10px;
+}
 .dlg-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
-.dlg-body { padding: 8px 20px 20px; display: flex; flex-direction: column; gap: 16px; }
-.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
-.field input, .field textarea {
-  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 14px; color: var(--ink);
+.dlg-body {
+  padding: 4px 24px 24px;
+  display: flex; flex-direction: column; gap: 18px;
+  max-height: calc(90vh - 56px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); }
+.field > label:first-child { font-size: 13px; font-weight: 500; color: var(--muted); }
+.field input[type="text"], .field input[type="search"], .field textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+  padding: 9px 12px; font-size: 14px; color: var(--ink); box-sizing: border-box;
 }
 .field textarea { resize: vertical; min-height: 90px; }
-.field-hint { margin: 0; font-size: 12px; color: var(--muted); opacity: 0.85; line-height: 1.4; }
+.field-hint { margin: 0; font-size: 12px; color: var(--muted); opacity: 0.85; line-height: 1.45; }
+
+/* Memory auto-toggle */
+.memory-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.memory-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.memory-toggle-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.memory-toggle-sub { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.toggle {
+  position: relative; width: 44px; height: 26px; flex: none; cursor: pointer;
+}
+.toggle input {
+  position: absolute; opacity: 0; width: 0; height: 0; margin: 0; pointer-events: none;
+}
+.toggle-track {
+  display: block; width: 44px; height: 26px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  transition: background .18s, border-color .18s;
+}
+.toggle-track::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--muted); transition: transform .18s, background .18s;
+}
+.toggle input:checked + .toggle-track {
+  background: color-mix(in srgb, var(--link) 35%, var(--bg));
+  border-color: var(--link);
+}
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(18px); background: var(--link);
+}
+.toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--link); outline-offset: 2px;
+}
+.memory-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .model-manage { display: flex; flex-direction: column; gap: 8px; }
 .model-pull-row { display: flex; gap: 8px; }
 .model-pull-row input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 14px; color: var(--ink); }

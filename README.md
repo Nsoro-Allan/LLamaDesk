@@ -17,7 +17,7 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Message queue** — type and queue the next message while the model is still generating
 - **Continue generating** on the latest reply
 - **Context length warning** with one-click summarize of older messages
-- **User memory** — save short preferences that are injected into every chat (Settings → Memory)
+- **User memory** — manual preferences plus optional automatic learning from chats (off by default; Settings → Memory)
 - **Custom model picker** that lists every model installed in Ollama
 - **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, and headings
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
@@ -297,7 +297,7 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - ~~Persistent document context in a chat~~ ✅
 - ~~Message queue + Continue generating~~ ✅
 - ~~Context / token awareness + summarize older~~ ✅
-- ~~User memory (explicit preferences)~~ ✅
+- ~~User memory (manual + opt-in automatic)~~ ✅
 - Per-chat system prompts / model / temperature
 - ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support
