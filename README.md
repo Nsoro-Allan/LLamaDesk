@@ -12,7 +12,12 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Image input** for vision models (attach, drag & drop, or paste)
 - **Text and code file input** (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.js`, and more)
 - **PDF text extraction** — text-layer PDFs via PDF.js; scanned PDFs via OCR (Tesseract) fallback
-- **Chat history** saved locally, with search and per-chat delete
+- **Chat history** saved locally, with search, rename, pin, and per-chat delete
+- **Persistent document context** — files attached to a chat stay available for later messages in that chat
+- **Message queue** — type and queue the next message while the model is still generating
+- **Continue generating** on the latest reply
+- **Context length warning** with one-click summarize of older messages
+- **User memory** — save short preferences that are injected into every chat (Settings → Memory)
 - **Custom model picker** that lists every model installed in Ollama
 - **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, and headings
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
@@ -288,8 +293,12 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - ~~Rename chats and edit sent messages~~ ✅
 - ~~Temporary (non-persistent) chat mode~~ ✅
 - ~~In-app model pull / delete~~ ✅
+- ~~Pin chats~~ ✅
+- ~~Persistent document context in a chat~~ ✅
+- ~~Message queue + Continue generating~~ ✅
+- ~~Context / token awareness + summarize older~~ ✅
+- ~~User memory (explicit preferences)~~ ✅
 - Per-chat system prompts / model / temperature
-- Context / token awareness + summarize older
 - ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support
 - ~~Auto-updater~~ ✅ (GitHub Releases + signed artifacts)

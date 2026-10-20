@@ -86,15 +86,18 @@ body.side-collapsed aside { visibility: hidden; border-right-color: transparent;
   flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 10px;
   font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink);
 }
-.conv-ren, .conv-del {
+.conv-ren, .conv-del, .conv-pin {
   background: none; border: 0; color: var(--muted); width: 28px; height: 28px; margin-right: 2px; border-radius: 8px;
   opacity: 0; font-size: 16px; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center; flex: none;
 }
-.conv:hover .conv-ren, .conv:hover .conv-del,
-.conv-ren:focus-visible, .conv-del:focus-visible { opacity: 1; }
+.conv:hover .conv-ren, .conv:hover .conv-del, .conv:hover .conv-pin,
+.conv-ren:focus-visible, .conv-del:focus-visible, .conv-pin:focus-visible,
+.conv-pin.on { opacity: 1; }
 .conv-ren:hover { color: var(--ink); background: var(--surface); }
 .conv-del:hover { color: var(--bad); background: var(--surface); }
+.conv-pin:hover, .conv-pin.on { color: var(--link); background: var(--surface); }
+.conv.pinned .conv-main { font-weight: 500; }
 .conv-edit {
   flex: 1; min-width: 0; margin: 4px 6px; padding: 4px 8px;
   background: var(--bg); border: 1px solid var(--link); border-radius: 8px;
@@ -141,6 +144,19 @@ main.empty .composer-wrap { padding-bottom: 0; }
   max-width: 760px; margin: 0 auto 10px; padding: 10px 14px; border: 1px solid var(--bad); border-radius: 14px;
   font-size: 14px; color: var(--ink);
 }
+.banner-btn {
+  margin-left: 8px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font-size: 13px; cursor: pointer;
+}
+.banner-btn:hover { background: var(--surface-2); }
+.memory-add-row { display: flex; gap: 8px; margin: 8px 0; }
+.memory-add-row input { flex: 1; min-width: 0; }
+.memory-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-height: 180px; overflow: auto; }
+.memory-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line); font-size: 13px;
+}
+.memory-item span { flex: 1; min-width: 0; }
 .composer {
   max-width: 760px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line);
   border-radius: 26px; padding: 14px 12px 10px 18px; transition: border-color .15s;
