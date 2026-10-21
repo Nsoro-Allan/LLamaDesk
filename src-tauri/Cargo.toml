@@ -1,6 +1,6 @@
 [package]
 name = "llamadesk"
-version = "0.1.1"
+version = "0.1.2"
 description = "Ollama Desktop GUI app."
 authors = ["Nsoro Allan"]
 edition = "2021"

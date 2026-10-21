@@ -22,8 +22,6 @@
     pin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z"/></svg>',
     pinFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z"/></svg>',
     continue: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>',
-    speak: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
-    speakStop: '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
     mic: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
     micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
     thinkOn: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z"/></svg>',
@@ -287,7 +285,13 @@
     // Convert bare \(...\) that span little content into placeholders later via inline;
     // also hoist multi-line \( rarely used as display
     t = t.replace(/```([\w+-]*)[^\n]*\n?([\s\S]*?)(```|$)/g, (m, lang, code) => {
-      blocks.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\n$/, '') });
+      const L = (lang || '').toLowerCase();
+      // Models often put math in ```latex / ```tex / ```math fences — render as KaTeX
+      if (/^(latex|tex|math|katex)$/.test(L)) {
+        blocks.push({ lang: 'math-display', code: code.replace(/\n$/, '').trim() });
+      } else {
+        blocks.push({ lang: L, code: code.replace(/\n$/, '') });
+      }
       return '\n\u0000' + (blocks.length - 1) + '\u0000\n';
     });
     t = esc(t);
@@ -295,13 +299,22 @@
     let out = '', para = [], list = null;
     const flushPara = () => { if (para.length) { out += '<p>' + inline(para.join('<br>')) + '</p>'; para = []; } };
     const flushList = () => { if (list) { out += '</' + list + '>'; list = null; } };
+    const mathBlockHtml = (code) => {
+      const parts = String(code || '').split(/\n+/).map((s) => s.trim()).filter(Boolean);
+      if (!parts.length) return '';
+      return parts.map((p) => {
+        p = p.replace(/^\$\$([\s\S]*)\$\$$/, '$1').replace(/^\\\(([\s\S]*)\\\)$/, '$1')
+             .replace(/^\\\[([\s\S]*)\\\]$/, '$1').replace(/^\$([\s\S]*)\$$/, '$1').trim();
+        return '<div class="math-display">$$' + esc(p) + '$$</div>';
+      }).join('');
+    };
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]; let m;
       if ((m = line.match(/^\u0000(\d+)\u0000$/))) {
         flushPara(); flushList();
         const b = blocks[+m[1]];
         if (b.lang === 'math-display') {
-          out += '<div class="math-display">$$' + esc(b.code) + '$$</div>';
+          out += mathBlockHtml(b.code);
         } else if (b.lang === 'mermaid') {
           out += '<div class="mermaid-wrap"><pre class="mermaid">' + esc(b.code) + '</pre></div>';
         } else {
@@ -871,14 +884,12 @@
   function stopIfBusy() { if (state.busy && state.abort) state.abort.abort(); }
   function newChat() {
     stopIfBusy();
-    try { stopTts(); } catch (_) {}
     state.queue = []; state.cur = null; state.pending = []; renderPending();
     els.thread.innerHTML = ''; setMode(); renderSidebar(); closeDrawer(); els.input.focus();
     updateContextBanner();
   }
   function newTempChat() {
     stopIfBusy();
-    try { stopTts(); } catch (_) {}
     state.queue = [];
     state.cur = makeConv({ temporary: true });
     state.convs.unshift(state.cur);
@@ -895,7 +906,6 @@
   function openConv(id) {
     const c = state.convs.find((x) => x.id === id); if (!c) return;
     stopIfBusy();
-    try { stopTts(); } catch (_) {}
     state.queue = []; state.cur = c;
     if (!Array.isArray(c.attachments)) c.attachments = [];
     renderThread(); setMode(); renderSidebar(); closeDrawer();
@@ -1057,23 +1067,6 @@
         );
       };
       a.appendChild(c);
-
-      const sp = document.createElement('button');
-      sp.className = 'icon-btn speak-btn';
-      sp.innerHTML = ICON.speak;
-      sp.title = 'Read aloud';
-      sp.setAttribute('aria-label', 'Read aloud');
-      sp.onclick = () => {
-        let text = m.content || '';
-        if (m.el.bubble) {
-          const clone = m.el.bubble.cloneNode(true);
-          clone.querySelectorAll('details.think, .mermaid-wrap, .math-display, pre').forEach((d) => d.remove());
-          const plain = clone.innerText.trim();
-          if (plain) text = plain;
-        }
-        speakText(text, sp);
-      };
-      a.appendChild(sp);
     }
     const cont = document.createElement('button');
     cont.className = 'icon-btn continue-btn';
@@ -1159,10 +1152,10 @@
     } catch (_) {}
     return mermaidReady;
   }
-  function enhanceBubble(root) {
+  function renderKatexIn(root) {
     if (!root) return;
-    // KaTeX — support $, $$, \( \), \[ \] (models often emit the latter)
-    if (window.renderMathInElement) {
+    const runAuto = () => {
+      if (!window.renderMathInElement) return false;
       try {
         renderMathInElement(root, {
           delimiters: [
@@ -1174,22 +1167,36 @@
           throwOnError: false,
           ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
         });
-      } catch (_) {}
-    } else if (window.katex) {
-      // Fallback: manual render of .math-display / .math-inline if auto-render missing
+        return true;
+      } catch (_) { return false; }
+    };
+    const runManual = () => {
+      if (!window.katex) return false;
       root.querySelectorAll('.math-display').forEach((el) => {
+        if (el.querySelector('.katex')) return; // already rendered
         const raw = (el.textContent || '').replace(/^\$\$|\$\$$/g, '').trim();
-        try {
-          katex.render(raw, el, { displayMode: true, throwOnError: false });
-        } catch (_) {}
+        if (!raw) return;
+        try { katex.render(raw, el, { displayMode: true, throwOnError: false }); } catch (_) {}
       });
       root.querySelectorAll('.math-inline').forEach((el) => {
+        if (el.querySelector('.katex')) return;
         const raw = (el.textContent || '').replace(/^\$|\$$/g, '').trim();
-        try {
-          katex.render(raw, el, { displayMode: false, throwOnError: false });
-        } catch (_) {}
+        if (!raw) return;
+        try { katex.render(raw, el, { displayMode: false, throwOnError: false }); } catch (_) {}
       });
-    }
+      return true;
+    };
+    if (runAuto() || runManual()) return;
+    // Scripts are deferred — retry briefly until KaTeX loads
+    let tries = 0;
+    const t = setInterval(() => {
+      tries++;
+      if (runAuto() || runManual() || tries > 20) clearInterval(t);
+    }, 100);
+  }
+  function enhanceBubble(root) {
+    if (!root) return;
+    renderKatexIn(root);
     // Mermaid
     if (ensureMermaid()) {
       const nodes = root.querySelectorAll('pre.mermaid');
@@ -1199,145 +1206,6 @@
     }
   }
 
-  /* ---------- text-to-speech ---------- */
-  let ttsUtterance = null;
-  let ttsActiveBtn = null;
-  function pickTtsVoice() {
-    if (!window.speechSynthesis) return null;
-    const voices = speechSynthesis.getVoices() || [];
-    if (!voices.length) return null;
-    // Prefer natural / enhanced English voices when available
-    const prefer = [
-      /google us english/i, /google uk english/i,
-      /microsoft (aria|jenny|guy|sara|ryan)/i,
-      /samantha/i, /karen/i, /daniel/i, /moira/i,
-      /natural/i, /neural/i, /enhanced/i
-    ];
-    for (const re of prefer) {
-      const v = voices.find((x) => re.test(x.name) && /^en/i.test(x.lang || ''));
-      if (v) return v;
-    }
-    const en = voices.find((x) => /^en/i.test(x.lang || ''));
-    return en || voices[0];
-  }
-  function tauriInvoke(cmd, args) {
-    try {
-      const T = window.__TAURI__;
-      if (T && T.core && typeof T.core.invoke === 'function') {
-        return T.core.invoke(cmd, args || {});
-      }
-    } catch (_) {}
-    return null;
-  }
-  function hasWebSpeech() {
-    return typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
-  }
-  function stopTts() {
-    if (hasWebSpeech()) {
-      try { speechSynthesis.cancel(); } catch (_) {}
-    }
-    // Desktop fallback (espeak / say / PowerShell)
-    const p = tauriInvoke('stop_speak');
-    if (p && typeof p.then === 'function') p.catch(() => {});
-    ttsUtterance = null;
-    if (ttsActiveBtn) {
-      ttsActiveBtn.innerHTML = ICON.speak;
-      ttsActiveBtn.title = 'Read aloud';
-      ttsActiveBtn.classList.remove('speaking');
-      ttsActiveBtn = null;
-    }
-  }
-  function cleanForSpeech(text) {
-    let clean = String(text || '')
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\$\$[\s\S]*?\$\$/g, ' ')
-      .replace(/\\\[([\s\S]*?)\\\]/g, ' ')
-      .replace(/\\\(([\s\S]*?)\\\)/g, ' ')
-      .replace(/\$([^$]+)\$/g, '$1')
-      .replace(/[#*_>~]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (clean.length > 8000) clean = clean.slice(0, 8000) + '…';
-    return clean;
-  }
-  async function speakViaNative(clean) {
-    const p = tauriInvoke('speak_text', { text: clean });
-    if (!p || typeof p.then !== 'function') {
-      throw new Error('Native TTS is not available. Rebuild the app to enable it.');
-    }
-    await p;
-  }
-  function speakText(text, btn) {
-    const speakingNow = ttsActiveBtn === btn && (
-      (hasWebSpeech() && speechSynthesis.speaking) || btn.classList.contains('speaking')
-    );
-    if (speakingNow) {
-      stopTts();
-      return;
-    }
-    stopTts();
-    const clean = cleanForSpeech(text);
-    if (!clean) {
-      toast('Nothing to read.');
-      return;
-    }
-
-    ttsActiveBtn = btn;
-    if (btn) {
-      btn.innerHTML = ICON.speakStop;
-      btn.title = 'Stop reading';
-      btn.classList.add('speaking');
-    }
-
-    // 1) Prefer browser / WebView speech when voices exist
-    if (hasWebSpeech()) {
-      const voices = speechSynthesis.getVoices() || [];
-      const tryWeb = () => {
-        const u = new SpeechSynthesisUtterance(clean);
-        const voice = pickTtsVoice();
-        if (voice) u.voice = voice;
-        u.rate = 1.02;
-        u.pitch = 1;
-        u.volume = 1;
-        u.onend = () => stopTts();
-        u.onerror = () => {
-          // Fall back to native engine
-          speakViaNative(clean).catch((e) => {
-            stopTts();
-            toast(e.message || 'Text-to-speech failed.');
-          });
-        };
-        ttsUtterance = u;
-        speechSynthesis.speak(u);
-        // If no voices, many Linux WebKits never speak — fall back after a short wait
-        if (!(speechSynthesis.getVoices() || []).length) {
-          setTimeout(() => {
-            if (!speechSynthesis.speaking && ttsActiveBtn === btn) {
-              try { speechSynthesis.cancel(); } catch (_) {}
-              speakViaNative(clean).catch((e) => {
-                stopTts();
-                toast(e.message || 'Install espeak-ng: sudo apt install espeak-ng');
-              });
-            }
-          }, 400);
-        }
-      };
-      if (!voices.length) {
-        speechSynthesis.onvoiceschanged = tryWeb;
-        setTimeout(tryWeb, 200);
-      } else {
-        tryWeb();
-      }
-      return;
-    }
-
-    // 2) Native desktop fallback (Ubuntu WebKitGTK has no speechSynthesis)
-    speakViaNative(clean).catch((e) => {
-      stopTts();
-      toast(e.message || 'Install a TTS engine: sudo apt install espeak-ng');
-    });
-  }
   els.thread.addEventListener('click', (e) => {
     const b = e.target.closest('[data-copy]'); if (!b) return;
     navigator.clipboard.writeText(b.closest('.code').querySelector('code').textContent).then(
