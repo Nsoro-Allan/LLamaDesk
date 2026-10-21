@@ -10,7 +10,8 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Streaming responses** with a Stop button and tokens-per-second readout
 - **Voice input** (push-to-talk) powered by on-device Whisper via `tauri-plugin-stt` — works offline after a one-time model download
 - **Image input** for vision models (attach, drag & drop, or paste)
-- **Text and code file input** (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.js`, and more)
+- **Text and code file input** (`.txt`, `.md`, `.csv`, `.json`, `.py`, `.js`, and more — up to 1 MB)
+- **Word documents (`.docx`)** — in-app text extraction via Mammoth
 - **PDF text extraction** — text-layer PDFs via PDF.js; scanned PDFs via OCR (Tesseract) fallback
 - **Chat history** saved locally, with search, rename, pin, and per-chat delete
 - **Persistent document context** — files attached to a chat stay available for later messages in that chat
@@ -19,7 +20,8 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Context length warning** with one-click summarize of older messages
 - **User memory** — manual preferences plus optional automatic learning from chats (off by default; Settings → Memory)
 - **Custom model picker** that lists every model installed in Ollama
-- **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, and headings
+- **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, headings, **KaTeX math**, and **Mermaid diagrams**
+- **Read aloud (TTS)** on replies — OS/browser voices, prefers natural English when available
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
 - **Copy** (rendered reply, without the Reasoning block) and **Regenerate** on every reply
 - **Settings** for system prompt, temperature, Ollama address, and theme
@@ -147,12 +149,14 @@ This updates the files in `src-tauri/icons/`. Commit the generated icons so buil
 ### Attachments
 
 - **Images** are resized (max side 1280 px), converted to JPEG, and sent to Ollama. The selected model must support vision.
-- **Text files** up to 400 KB are inserted into the message as fenced blocks.
+- **Text files** up to 1 MB are inserted into the message as fenced blocks.
+- **Word (`.docx`)** — text extracted in-app via Mammoth (up to 20 MB; ~200k characters).
 - **PDFs** are extracted in-app:
   - Text PDFs: embedded text via PDF.js
   - Scanned / image PDFs: OCR via Tesseract.js (first OCR may download language data; later use is cached)
   - Limits: 40 MB file size, first 25 pages, ~100k characters
-- **Office documents** (`.docx`, etc.) are not read directly — export to PDF or plain text first.
+- **Math & diagrams** in replies: `$inline$` / `$$display$$` via KaTeX; ` ```mermaid ` fenced blocks via Mermaid.
+- **Read aloud** uses the browser/OS speech engine (no cloud). Click the speaker icon on any reply.
 
 ## Configuration
 
@@ -178,10 +182,13 @@ LLamaDesk/
 │   ├── highlight.min.js         # Code syntax highlighting
 │   ├── highlight-dark.css
 │   ├── highlight-light.css
-│   ├── vendor/                  # PDF.js + Tesseract.js (PDF extract / OCR)
+│   ├── vendor/                  # PDF.js, Tesseract, Mammoth, KaTeX, Mermaid
 │   │   ├── pdf.min.js
 │   │   ├── pdf.worker.min.js
-│   │   └── tesseract.min.js
+│   │   ├── tesseract.min.js
+│   │   ├── mammoth.min.js
+│   │   ├── katex.min.js / katex.min.css / fonts/
+│   │   └── mermaid.min.js
 │   └── Assets/
 │       └── favicon.png
 ├── src-tauri/                   # Tauri / Rust backend
@@ -298,6 +305,9 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - ~~Message queue + Continue generating~~ ✅
 - ~~Context / token awareness + summarize older~~ ✅
 - ~~User memory (manual + opt-in automatic)~~ ✅
+- ~~Word (.docx) extraction~~ ✅
+- ~~KaTeX math + Mermaid diagrams~~ ✅
+- ~~Read aloud (TTS) on replies~~ ✅
 - Per-chat system prompts / model / temperature
 - ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support

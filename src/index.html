@@ -4,10 +4,15 @@
 <title>llamaDesk</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="highlight-dark.css" id="hljs-theme">
+<link rel="stylesheet" href="vendor/katex.min.css">
 <link rel="shortcut icon" href="./Assets/favicon.png" type="image/x-icon">
 <script src="highlight.min.js" defer></script>
 <script src="vendor/pdf.min.js"></script>
 <script src="vendor/tesseract.min.js"></script>
+<script src="vendor/mammoth.min.js"></script>
+<script src="vendor/katex.min.js" defer></script>
+<script src="vendor/katex-auto-render.min.js" defer></script>
+<script src="vendor/mermaid.min.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -80,7 +85,7 @@
           </div>
         </div>
         <input type="file" id="file" multiple hidden
-          accept="image/*,application/pdf,.pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.sh,.c,.cpp,.h,.java,.go,.rs,.sql,.log,.ini,.toml">
+          accept="image/*,application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.sh,.c,.cpp,.h,.java,.go,.rs,.sql,.log,.ini,.toml,.rtf">
       </div>
       <div class="chips" id="chips">
         <button class="pill" data-act="fill" data-text="Write a Python script that ">Write code</button>

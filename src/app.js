@@ -22,6 +22,8 @@
     pin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z"/></svg>',
     pinFilled: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1z"/></svg>',
     continue: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>',
+    speak: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
+    speakStop: '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
     mic: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
     micOff: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
     thinkOn: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2z"/></svg>',
@@ -215,6 +217,8 @@
       const dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
       link.href = dark ? 'highlight-dark.css' : 'highlight-light.css';
     }
+    // Mermaid must re-init when theme changes
+    try { if (typeof mermaidReady !== 'undefined') mermaidReady = false; } catch (_) {}
   }
   function setTheme(t, save = true) {
     applyTheme(t);
@@ -242,15 +246,28 @@
     if (!msg) delete els.banner.dataset.kind;
   }
 
-  /* ---------- markdown (escaped, no external libs for core parsing) ---------- */
+  /* ---------- markdown (+ KaTeX math, Mermaid) ---------- */
   function inline(s) {
-    return s.split(/(`[^`\n]+`)/).map((part, i) => {
+    // Protect inline math: $...$ and \(...\) before other formatting
+    const maths = [];
+    const pushMath = (expr) => {
+      maths.push(expr);
+      return '\u0001' + (maths.length - 1) + '\u0001';
+    };
+    // Already-escaped \( ... \) from esc() becomes \\( ... \\) — handle both
+    s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, expr) => pushMath(expr));
+    s = s.replace(/\$([^\$\n]+?)\$/g, (_, expr) => pushMath(expr));
+    let out = s.split(/(`[^`\n]+`)/).map((part, i) => {
       if (i % 2) return '<code>' + part.slice(1, -1) + '</code>';
       return part
         .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
         .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>')
         .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     }).join('');
+    out = out.replace(/\u0001(\d+)\u0001/g, (_, i) =>
+      '<span class="math-inline">$' + maths[+i] + '$</span>'
+    );
+    return out;
   }
   const isRow = (l) => /^\s*\|.*\|\s*$/.test(l);
   const isSep = (l) => l.includes('-') && l.includes('|') && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l);
@@ -258,7 +275,18 @@
 
   function md(src) {
     const blocks = [];
-    let t = src.replace(/```([\w+-]*)[^\n]*\n?([\s\S]*?)(```|$)/g, (m, lang, code) => {
+    // Display math: $$...$$ and \[...\] (LLM-preferred) before code fences
+    let t = src.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
+      blocks.push({ lang: 'math-display', code: expr.trim() });
+      return '\n\u0000' + (blocks.length - 1) + '\u0000\n';
+    });
+    t = t.replace(/\\\[([\s\S]+?)\\\]/g, (_, expr) => {
+      blocks.push({ lang: 'math-display', code: expr.trim() });
+      return '\n\u0000' + (blocks.length - 1) + '\u0000\n';
+    });
+    // Convert bare \(...\) that span little content into placeholders later via inline;
+    // also hoist multi-line \( rarely used as display
+    t = t.replace(/```([\w+-]*)[^\n]*\n?([\s\S]*?)(```|$)/g, (m, lang, code) => {
       blocks.push({ lang: (lang || '').toLowerCase(), code: code.replace(/\n$/, '') });
       return '\n\u0000' + (blocks.length - 1) + '\u0000\n';
     });
@@ -272,9 +300,15 @@
       if ((m = line.match(/^\u0000(\d+)\u0000$/))) {
         flushPara(); flushList();
         const b = blocks[+m[1]];
-        const langClass = b.lang ? ' class="language-' + esc(b.lang) + '"' : '';
-        out += '<div class="code"><div class="code-head"><span>' + esc(b.lang || 'text') +
-               '</span><button type="button" data-copy>Copy</button></div><pre><code' + langClass + '>' + esc(b.code) + '</code></pre></div>';
+        if (b.lang === 'math-display') {
+          out += '<div class="math-display">$$' + esc(b.code) + '$$</div>';
+        } else if (b.lang === 'mermaid') {
+          out += '<div class="mermaid-wrap"><pre class="mermaid">' + esc(b.code) + '</pre></div>';
+        } else {
+          const langClass = b.lang ? ' class="language-' + esc(b.lang) + '"' : '';
+          out += '<div class="code"><div class="code-head"><span>' + esc(b.lang || 'text') +
+                 '</span><button type="button" data-copy>Copy</button></div><pre><code' + langClass + '>' + esc(b.code) + '</code></pre></div>';
+        }
       } else if (isRow(line) && i + 1 < lines.length && isSep(lines[i + 1])) {
         flushPara(); flushList();
         const head = cells(line); const rows = [];
@@ -416,6 +450,26 @@
     const name = (f.name || '').toLowerCase();
     return f.type === 'application/pdf' || name.endsWith('.pdf');
   }
+  function isDocxFile(f) {
+    const name = (f.name || '').toLowerCase();
+    return name.endsWith('.docx') ||
+      f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  async function extractDocx(file) {
+    if (typeof mammoth === 'undefined') {
+      throw new Error('Word (.docx) support not loaded. Check vendor/mammoth.min.js.');
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      throw new Error(file.name + ' is over 20 MB. Use a smaller document or an excerpt.');
+    }
+    const buf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    let text = (result.value || '').replace(/\r\n/g, '\n').trim();
+    if (!text) throw new Error('No text could be extracted from ' + file.name + '.');
+    if (text.length > 200000) text = text.slice(0, 200000) + '\n\n[… truncated]';
+    toast('Extracted text from ' + file.name + '.');
+    return text;
+  }
 
   function ensurePdfJs() {
     const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'] || null;
@@ -511,6 +565,38 @@
     return text;
   }
 
+  async function readPlainTextFile(file) {
+    // Prefer UTF-8; fall back to UTF-16 LE/BE when many null bytes (common Windows .txt)
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (!bytes.length) return '';
+    // BOM detection
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+      return new TextDecoder('utf-16le').decode(bytes);
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+      return new TextDecoder('utf-16be').decode(bytes);
+    }
+    if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    // Heuristic: if >10% null bytes in first 4KB, treat as UTF-16LE
+    const sample = bytes.subarray(0, Math.min(4096, bytes.length));
+    let nulls = 0;
+    for (let i = 0; i < sample.length; i++) if (sample[i] === 0) nulls++;
+    if (nulls > sample.length * 0.1) {
+      try { return new TextDecoder('utf-16le').decode(bytes); } catch (_) {}
+    }
+    let text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    // Strip residual NULs from mixed encodings
+    if (text.includes('\u0000')) text = text.replace(/\u0000/g, '');
+    return text;
+  }
+
+  function isLikelyTextName(name) {
+    return /\.(txt|md|markdown|csv|tsv|json|yaml|yml|xml|html|htm|css|js|mjs|cjs|ts|tsx|jsx|py|sh|bash|zsh|c|cpp|h|hpp|java|go|rs|sql|log|ini|toml|cfg|conf|env|rtf|tex|bib|rst|org)$/i.test(name || '');
+  }
+
   async function addFiles(list) {
     for (const f of Array.from(list)) {
       try {
@@ -520,11 +606,26 @@
         } else if (isPdfFile(f)) {
           const text = await extractPdf(f);
           state.pending.push({ kind: 'text', name: f.name || 'document.pdf', text });
+        } else if (isDocxFile(f)) {
+          const text = await extractDocx(f);
+          state.pending.push({ kind: 'text', name: f.name || 'document.docx', text });
         } else {
-          if (f.size > 400 * 1024) { toast(f.name + ' is over 400 KB. Attach a smaller file or an excerpt.'); continue; }
-          const text = await f.text();
-          if (text.includes('\u0000')) { toast(f.name + ' isn\u2019t plain text. For PDFs, attach the .pdf file directly.'); continue; }
-          state.pending.push({ kind: 'text', name: f.name, text });
+          // Plain text and common code / data files (up to 1 MB)
+          if (f.size > 1024 * 1024) { toast(f.name + ' is over 1 MB. Attach a smaller file or an excerpt.'); continue; }
+          const name = f.name || 'file.txt';
+          const text = await readPlainTextFile(f);
+          if (!text.trim()) {
+            toast(name + ' is empty or could not be read as text.');
+            continue;
+          }
+          // Reject obvious binaries (high ratio of replacement chars) unless extension is known-text
+          const sample = text.slice(0, 2000);
+          const bad = (sample.match(/\uFFFD/g) || []).length;
+          if (!isLikelyTextName(name) && bad > sample.length * 0.05) {
+            toast(name + ' isn\u2019t plain text. For Word use .docx; for PDFs attach the .pdf file.');
+            continue;
+          }
+          state.pending.push({ kind: 'text', name, text });
         }
       } catch (e) { toast(e.message || String(e)); }
     }
@@ -769,12 +870,15 @@
   }
   function stopIfBusy() { if (state.busy && state.abort) state.abort.abort(); }
   function newChat() {
-    stopIfBusy(); state.queue = []; state.cur = null; state.pending = []; renderPending();
+    stopIfBusy();
+    try { stopTts(); } catch (_) {}
+    state.queue = []; state.cur = null; state.pending = []; renderPending();
     els.thread.innerHTML = ''; setMode(); renderSidebar(); closeDrawer(); els.input.focus();
     updateContextBanner();
   }
   function newTempChat() {
     stopIfBusy();
+    try { stopTts(); } catch (_) {}
     state.queue = [];
     state.cur = makeConv({ temporary: true });
     state.convs.unshift(state.cur);
@@ -790,7 +894,9 @@
   }
   function openConv(id) {
     const c = state.convs.find((x) => x.id === id); if (!c) return;
-    stopIfBusy(); state.queue = []; state.cur = c;
+    stopIfBusy();
+    try { stopTts(); } catch (_) {}
+    state.queue = []; state.cur = c;
     if (!Array.isArray(c.attachments)) c.attachments = [];
     renderThread(); setMode(); renderSidebar(); closeDrawer();
     updateContextBanner();
@@ -951,6 +1057,23 @@
         );
       };
       a.appendChild(c);
+
+      const sp = document.createElement('button');
+      sp.className = 'icon-btn speak-btn';
+      sp.innerHTML = ICON.speak;
+      sp.title = 'Read aloud';
+      sp.setAttribute('aria-label', 'Read aloud');
+      sp.onclick = () => {
+        let text = m.content || '';
+        if (m.el.bubble) {
+          const clone = m.el.bubble.cloneNode(true);
+          clone.querySelectorAll('details.think, .mermaid-wrap, .math-display, pre').forEach((d) => d.remove());
+          const plain = clone.innerText.trim();
+          if (plain) text = plain;
+        }
+        speakText(text, sp);
+      };
+      a.appendChild(sp);
     }
     const cont = document.createElement('button');
     cont.className = 'icon-btn continue-btn';
@@ -1005,15 +1128,215 @@
         details.addEventListener('toggle', () => { m.thinkOpen = details.open; });
       }
 
-      // Syntax-highlight code blocks when highlight.js is available
-      if (final && window.hljs) {
-        m.el.bubble.querySelectorAll('pre code').forEach((el) => {
-          try { window.hljs.highlightElement(el); } catch (_) {}
-        });
+      // Syntax-highlight, math, diagrams — only on final paint
+      if (final) {
+        if (window.hljs) {
+          m.el.bubble.querySelectorAll('pre code').forEach((el) => {
+            try { window.hljs.highlightElement(el); } catch (_) {}
+          });
+        }
+        enhanceBubble(m.el.bubble);
       }
       if (nearBottom) els.scroll.scrollTop = els.scroll.scrollHeight;
     };
     final ? run() : (raf = requestAnimationFrame(run));
+  }
+
+  let mermaidReady = false;
+  function ensureMermaid() {
+    if (mermaidReady || typeof mermaid === 'undefined') return mermaidReady;
+    try {
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        (!document.documentElement.getAttribute('data-theme') &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: dark ? 'dark' : 'default',
+        fontFamily: 'inherit'
+      });
+      mermaidReady = true;
+    } catch (_) {}
+    return mermaidReady;
+  }
+  function enhanceBubble(root) {
+    if (!root) return;
+    // KaTeX — support $, $$, \( \), \[ \] (models often emit the latter)
+    if (window.renderMathInElement) {
+      try {
+        renderMathInElement(root, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false }
+          ],
+          throwOnError: false,
+          ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        });
+      } catch (_) {}
+    } else if (window.katex) {
+      // Fallback: manual render of .math-display / .math-inline if auto-render missing
+      root.querySelectorAll('.math-display').forEach((el) => {
+        const raw = (el.textContent || '').replace(/^\$\$|\$\$$/g, '').trim();
+        try {
+          katex.render(raw, el, { displayMode: true, throwOnError: false });
+        } catch (_) {}
+      });
+      root.querySelectorAll('.math-inline').forEach((el) => {
+        const raw = (el.textContent || '').replace(/^\$|\$$/g, '').trim();
+        try {
+          katex.render(raw, el, { displayMode: false, throwOnError: false });
+        } catch (_) {}
+      });
+    }
+    // Mermaid
+    if (ensureMermaid()) {
+      const nodes = root.querySelectorAll('pre.mermaid');
+      if (nodes.length) {
+        try { mermaid.run({ nodes: Array.from(nodes) }); } catch (_) {}
+      }
+    }
+  }
+
+  /* ---------- text-to-speech ---------- */
+  let ttsUtterance = null;
+  let ttsActiveBtn = null;
+  function pickTtsVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    // Prefer natural / enhanced English voices when available
+    const prefer = [
+      /google us english/i, /google uk english/i,
+      /microsoft (aria|jenny|guy|sara|ryan)/i,
+      /samantha/i, /karen/i, /daniel/i, /moira/i,
+      /natural/i, /neural/i, /enhanced/i
+    ];
+    for (const re of prefer) {
+      const v = voices.find((x) => re.test(x.name) && /^en/i.test(x.lang || ''));
+      if (v) return v;
+    }
+    const en = voices.find((x) => /^en/i.test(x.lang || ''));
+    return en || voices[0];
+  }
+  function tauriInvoke(cmd, args) {
+    try {
+      const T = window.__TAURI__;
+      if (T && T.core && typeof T.core.invoke === 'function') {
+        return T.core.invoke(cmd, args || {});
+      }
+    } catch (_) {}
+    return null;
+  }
+  function hasWebSpeech() {
+    return typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
+  }
+  function stopTts() {
+    if (hasWebSpeech()) {
+      try { speechSynthesis.cancel(); } catch (_) {}
+    }
+    // Desktop fallback (espeak / say / PowerShell)
+    const p = tauriInvoke('stop_speak');
+    if (p && typeof p.then === 'function') p.catch(() => {});
+    ttsUtterance = null;
+    if (ttsActiveBtn) {
+      ttsActiveBtn.innerHTML = ICON.speak;
+      ttsActiveBtn.title = 'Read aloud';
+      ttsActiveBtn.classList.remove('speaking');
+      ttsActiveBtn = null;
+    }
+  }
+  function cleanForSpeech(text) {
+    let clean = String(text || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\$\$[\s\S]*?\$\$/g, ' ')
+      .replace(/\\\[([\s\S]*?)\\\]/g, ' ')
+      .replace(/\\\(([\s\S]*?)\\\)/g, ' ')
+      .replace(/\$([^$]+)\$/g, '$1')
+      .replace(/[#*_>~]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (clean.length > 8000) clean = clean.slice(0, 8000) + '…';
+    return clean;
+  }
+  async function speakViaNative(clean) {
+    const p = tauriInvoke('speak_text', { text: clean });
+    if (!p || typeof p.then !== 'function') {
+      throw new Error('Native TTS is not available. Rebuild the app to enable it.');
+    }
+    await p;
+  }
+  function speakText(text, btn) {
+    const speakingNow = ttsActiveBtn === btn && (
+      (hasWebSpeech() && speechSynthesis.speaking) || btn.classList.contains('speaking')
+    );
+    if (speakingNow) {
+      stopTts();
+      return;
+    }
+    stopTts();
+    const clean = cleanForSpeech(text);
+    if (!clean) {
+      toast('Nothing to read.');
+      return;
+    }
+
+    ttsActiveBtn = btn;
+    if (btn) {
+      btn.innerHTML = ICON.speakStop;
+      btn.title = 'Stop reading';
+      btn.classList.add('speaking');
+    }
+
+    // 1) Prefer browser / WebView speech when voices exist
+    if (hasWebSpeech()) {
+      const voices = speechSynthesis.getVoices() || [];
+      const tryWeb = () => {
+        const u = new SpeechSynthesisUtterance(clean);
+        const voice = pickTtsVoice();
+        if (voice) u.voice = voice;
+        u.rate = 1.02;
+        u.pitch = 1;
+        u.volume = 1;
+        u.onend = () => stopTts();
+        u.onerror = () => {
+          // Fall back to native engine
+          speakViaNative(clean).catch((e) => {
+            stopTts();
+            toast(e.message || 'Text-to-speech failed.');
+          });
+        };
+        ttsUtterance = u;
+        speechSynthesis.speak(u);
+        // If no voices, many Linux WebKits never speak — fall back after a short wait
+        if (!(speechSynthesis.getVoices() || []).length) {
+          setTimeout(() => {
+            if (!speechSynthesis.speaking && ttsActiveBtn === btn) {
+              try { speechSynthesis.cancel(); } catch (_) {}
+              speakViaNative(clean).catch((e) => {
+                stopTts();
+                toast(e.message || 'Install espeak-ng: sudo apt install espeak-ng');
+              });
+            }
+          }, 400);
+        }
+      };
+      if (!voices.length) {
+        speechSynthesis.onvoiceschanged = tryWeb;
+        setTimeout(tryWeb, 200);
+      } else {
+        tryWeb();
+      }
+      return;
+    }
+
+    // 2) Native desktop fallback (Ubuntu WebKitGTK has no speechSynthesis)
+    speakViaNative(clean).catch((e) => {
+      stopTts();
+      toast(e.message || 'Install a TTS engine: sudo apt install espeak-ng');
+    });
   }
   els.thread.addEventListener('click', (e) => {
     const b = e.target.closest('[data-copy]'); if (!b) return;

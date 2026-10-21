@@ -437,6 +437,22 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
   opacity: 1;
 }
 
+/* ---------- math (KaTeX) + Mermaid ---------- */
+.math-display {
+  overflow-x: auto; margin: 12px 0; padding: 8px 4px;
+  text-align: center;
+}
+.math-inline { display: inline; }
+.msg .bubble .katex { font-size: 1.05em; }
+.msg .bubble .katex-display { margin: 0.6em 0; }
+.mermaid-wrap {
+  margin: 12px 0; padding: 12px; border-radius: 14px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  overflow-x: auto;
+}
+.mermaid-wrap .mermaid { margin: 0; background: transparent; }
+.speak-btn.speaking { color: var(--link); }
+
 /* ---------- small screens ---------- */
 @media (max-width: 800px) {
   .app, body.side-collapsed .app { grid-template-columns: 1fr; }
