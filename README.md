@@ -21,7 +21,6 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **User memory** — manual preferences plus optional automatic learning from chats (off by default; Settings → Memory)
 - **Custom model picker** that lists every model installed in Ollama
 - **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, headings, **KaTeX math**, and **Mermaid diagrams**
-- **Read aloud (TTS)** on replies — OS/browser voices, prefers natural English when available
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
 - **Copy** (rendered reply, without the Reasoning block) and **Regenerate** on every reply
 - **Settings** for system prompt, temperature, Ollama address, and theme
