@@ -293,26 +293,6 @@ Contributions are welcome.
 
 Bug reports and feature ideas are appreciated. Please include your OS, Ollama version, and the model you were using.
 
-## Roadmap ideas
-
-- ~~Export / import chats~~ ✅
-- ~~Rename chats and edit sent messages~~ ✅
-- ~~Temporary (non-persistent) chat mode~~ ✅
-- ~~In-app model pull / delete~~ ✅
-- ~~Pin chats~~ ✅
-- ~~Persistent document context in a chat~~ ✅
-- ~~Message queue + Continue generating~~ ✅
-- ~~Context / token awareness + summarize older~~ ✅
-- ~~User memory (manual + opt-in automatic)~~ ✅
-- ~~Word (.docx) extraction~~ ✅
-- ~~KaTeX math + Mermaid diagrams~~ ✅
-- Per-chat system prompts / model / temperature
-- ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
-- System tray support
-- ~~Auto-updater~~ ✅ (GitHub Releases + signed artifacts)
-- macOS builds (requires Apple Developer certificate)
-- Optional larger Whisper models in Settings
-
 ## Auto-updates
 
 llamaDesk can update itself from [GitHub Releases](https://github.com/Nsoro-Allan/LLamaDesk/releases).
