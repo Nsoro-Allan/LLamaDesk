@@ -287,8 +287,8 @@ llamaDesk only talks to the Ollama address you configure. Voice models are downl
 Contributions are welcome.
 
 1. Fork the repository and create a branch.
-3. Test on at least one desktop platform.
-4. Open a pull request describing the change.
+2. Test on at least one desktop platform.
+3. Open a pull request describing the change.
 
 Bug reports and feature ideas are appreciated. Please include your OS, Ollama version, and the model you were using.
 
