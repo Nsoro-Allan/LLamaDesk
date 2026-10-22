@@ -332,8 +332,3 @@ git push origin v0.1.1
 
 Released under the [MIT License](LICENSE).
 
-## Acknowledgements
-
-Built for use with [Ollama](https://ollama.com) and [Tauri](https://tauri.app).  
-Speech-to-text uses [tauri-plugin-stt](https://github.com/brenogonzaga/tauri-plugin-stt) (Whisper).  
-llamaDesk is an independent project and is not affiliated with or endorsed by Ollama or the Tauri project.
