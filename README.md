@@ -307,7 +307,6 @@ Bug reports and feature ideas are appreciated. Please include your OS, Ollama ve
 - ~~User memory (manual + opt-in automatic)~~ ✅
 - ~~Word (.docx) extraction~~ ✅
 - ~~KaTeX math + Mermaid diagrams~~ ✅
-- ~~Read aloud (TTS) on replies~~ ✅
 - Per-chat system prompts / model / temperature
 - ~~In-app PDF text extraction~~ ✅ (text layer + OCR fallback)
 - System tray support
