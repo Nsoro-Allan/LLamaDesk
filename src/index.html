@@ -139,28 +139,6 @@
       <p class="field-hint">Pull or delete models via your local Ollama. Requires Ollama to be running.</p>
     </div>
     <div class="field">
-      <label>Memory</label>
-      <p class="field-hint" style="margin-top:0">Facts the app remembers about you and injects into every chat. Stored only on this device.</p>
-      <div class="memory-toggle">
-        <div class="memory-toggle-text">
-          <span class="memory-toggle-title">Automatic memory</span>
-          <span class="memory-toggle-sub">Off by default. When on, learn durable preferences from chats using your local Ollama model.</span>
-        </div>
-        <label class="toggle" title="Toggle automatic memory">
-          <input type="checkbox" id="autoMemory">
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <div class="memory-add-row">
-        <input type="text" id="memoryInput" placeholder="e.g. Prefer short answers with code examples" maxlength="240" autocomplete="off">
-        <button class="btn" id="memoryAdd" type="button">Add</button>
-      </div>
-      <div id="memoryList" class="memory-list"></div>
-      <div class="memory-actions">
-        <button class="btn" id="memoryClear" type="button">Clear all memories</button>
-      </div>
-    </div>
-    <div class="field">
       <label>Chat history</label>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" id="exportChats" type="button">Export chats</button>

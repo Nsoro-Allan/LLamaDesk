@@ -37,16 +37,11 @@
   const CONTEXT_WARN_CHARS = 24000; // ~6k tokens rough warning threshold
   const CONTEXT_SUMMARIZE_KEEP = 4;  // keep last N messages after summarize
 
-  const MEMORY_MAX = 25; // hard cap on stored preference items
-
   const state = {
     models: [], model: '', convs: [], cur: null, pending: [], busy: false, abort: null,
     vision: null, thinking: null,
     thinkEnabled: store.get('think', '1') !== '0',
-    autoMemory: store.get('autoMemory', '0') === '1', // opt-in; off by default
-    queue: [],          // message queue while generating
-    memory: [],         // user preferences (manual + optional auto)
-    memoryBusy: false   // background extraction in flight
+    queue: []           // message queue while generating
   };
 
   function persist() {
@@ -62,120 +57,6 @@
         }))
       }));
     if (!store.set('convs', JSON.stringify(data))) toast('Couldn\u2019t save chat history. Browser storage may be full or disabled.');
-  }
-  function persistMemory() {
-    store.set('memory', JSON.stringify(state.memory));
-  }
-  function setAutoMemory(on) {
-    state.autoMemory = !!on;
-    store.set('autoMemory', state.autoMemory ? '1' : '0');
-  }
-  function normalizeMemoryText(t) {
-    return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 240);
-  }
-  function memoryExists(text) {
-    const key = text.toLowerCase();
-    return state.memory.some((m) => (m.text || '').toLowerCase() === key);
-  }
-  function addMemoryItem(text, source) {
-    const t = normalizeMemoryText(text);
-    if (!t || t.length < 8) return false;
-    if (memoryExists(t)) return false;
-    state.memory.push({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-      text: t,
-      created: Date.now(),
-      source: source === 'auto' ? 'auto' : 'user'
-    });
-    // Keep newest preferences if over cap
-    if (state.memory.length > MEMORY_MAX) {
-      state.memory = state.memory.slice(state.memory.length - MEMORY_MAX);
-    }
-    persistMemory();
-    return true;
-  }
-
-  /**
-   * Opt-in automatic memory: after a reply, ask the local model to extract
-   * durable user preferences. Runs in the background; never blocks chat.
-   * Off by default — user must enable in Settings.
-   */
-  async function maybeRememberFromChat(conv) {
-    if (!state.autoMemory || state.memoryBusy || !conv || conv.temporary) return;
-    if (!state.model) return;
-    const ms = conv.messages || [];
-    if (ms.length < 2) return;
-
-    // Use the last user + assistant pair; skip tiny / continue-only turns
-    const lastUser = [...ms].reverse().find((m) => m.role === 'user');
-    const lastAsst = [...ms].reverse().find((m) => m.role === 'assistant');
-    if (!lastUser || !lastAsst) return;
-    const userText = (lastUser.content || '').trim();
-    if (userText.length < 24) return;
-    if (/^(continue\.?|go on\.?|keep going\.?|more\.?)$/i.test(userText)) return;
-
-    // Don't re-extract too often on the same chat (every ~2 user turns)
-    const userTurns = ms.filter((m) => m.role === 'user').length;
-    if (userTurns > 1 && userTurns % 2 === 1) return;
-
-    const existing = state.memory.map((m) => m.text).join('\n') || '(none)';
-    const excerpt =
-      'User: ' + userText.slice(0, 1200) + '\n\nAssistant: ' + (lastAsst.content || '').slice(0, 800);
-
-    const extractPrompt =
-      'You extract durable user preferences for a personal AI assistant.\n' +
-      'From the exchange below, return ONLY a JSON array of 0 to 3 short strings.\n' +
-      'Each string is one lasting preference about style, format, tone, language, or domain ' +
-      '(examples: "Prefer concise bullet-point answers", "I am a React developer", "Always show TypeScript examples").\n' +
-      'Do NOT invent preferences. Skip one-off requests, temporary tasks, and anything already listed.\n' +
-      'If nothing durable is clear, return [].\n' +
-      'No markdown, no explanation — JSON array only.\n\n' +
-      'Already remembered:\n' + existing + '\n\n' +
-      'Exchange:\n' + excerpt;
-
-    state.memoryBusy = true;
-    try {
-      const res = await fetch(base() + '/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: state.model,
-          stream: false,
-          messages: [
-            { role: 'system', content: 'You output only valid JSON arrays of short preference strings.' },
-            { role: 'user', content: extractPrompt }
-          ],
-          options: { temperature: 0.2 }
-        })
-      });
-      if (!res.ok) return;
-      const j = await res.json();
-      let raw = (j.message && j.message.content) || j.response || '';
-      raw = String(raw).trim();
-      // Strip optional markdown fences
-      const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      if (fence) raw = fence[1].trim();
-      const arrMatch = raw.match(/\[[\s\S]*\]/);
-      if (!arrMatch) return;
-      let items;
-      try { items = JSON.parse(arrMatch[0]); } catch { return; }
-      if (!Array.isArray(items) || !items.length) return;
-
-      const added = [];
-      items.forEach((it) => {
-        const text = typeof it === 'string' ? it : (it && it.text);
-        if (addMemoryItem(text, 'auto')) added.push(normalizeMemoryText(text));
-      });
-      if (added.length) {
-        toast('Remembered: ' + added[0] + (added.length > 1 ? ' (+' + (added.length - 1) + ')' : ''));
-        // Refresh list if settings is open
-        if (els.dlg && els.dlg.open) renderMemoryList();
-      }
-    } catch (_) {
-      // Silent — background feature must never interrupt chat
-    } finally {
-      state.memoryBusy = false;
-    }
   }
   try {
     state.convs = JSON.parse(store.get('convs', '[]')).map((c) => {
@@ -196,10 +77,6 @@
       };
     });
   } catch { state.convs = []; }
-  try {
-    const mem = JSON.parse(store.get('memory', '[]'));
-    state.memory = Array.isArray(mem) ? mem.filter((m) => m && typeof m.text === 'string' && m.text.trim()) : [];
-  } catch { state.memory = []; }
 
   els.base.value = store.get('base', 'http://localhost:11434');
   els.system.value = store.get('system', '');
@@ -227,10 +104,38 @@
   if (store.get('side', '') === 'collapsed') document.body.classList.add('side-collapsed');
 
   /* ---------- helpers ---------- */
-  function toast(msg) {
+  function getToastHost() {
+    let host = document.getElementById('toastHost');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toastHost';
+      host.className = 'toast-host';
+      host.setAttribute('aria-live', 'polite');
+      host.setAttribute('aria-relevant', 'additions');
+      document.body.appendChild(host);
+    }
+    // Keep host inside an open modal so toasts appear above the top layer
+    const openDialog = document.querySelector('dialog[open]');
+    const target = openDialog || document.body;
+    if (host.parentElement !== target) target.appendChild(host);
+    return host;
+  }
+
+  function toast(msg, durationMs = 5000) {
+    const host = getToastHost();
     const t = document.createElement('div');
-    t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
-    document.body.appendChild(t); setTimeout(() => t.remove(), 4200);
+    t.className = 'toast';
+    t.textContent = msg;
+    t.setAttribute('role', 'status');
+    host.appendChild(t);
+
+    requestAnimationFrame(() => t.classList.add('show'));
+
+    const ms = Math.max(5000, durationMs | 0);
+    setTimeout(() => {
+      t.classList.remove('show');
+      setTimeout(() => t.remove(), 280);
+    }, ms);
   }
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   function setStatus(kind, text) {
@@ -1234,10 +1139,9 @@
     });
   }
 
-  /** Approximate character count of what will be sent (system + memory + attachments + messages). */
+  /** Approximate character count of what will be sent (system + attachments + messages). */
   function approxContextChars(conv) {
     let n = (els.system.value || '').length;
-    state.memory.forEach((m) => { n += (m.text || '').length + 2; });
     if (conv && conv.attachments) conv.attachments.forEach((a) => { n += (a.name || '').length + (a.text || '').length + 20; });
     (conv && conv.messages || []).forEach((m) => {
       n += (m.content || '').length;
@@ -1247,13 +1151,7 @@
   }
 
   function buildSystemContent() {
-    const parts = [];
-    const sys = els.system.value.trim();
-    if (sys) parts.push(sys);
-    if (state.memory.length) {
-      parts.push('User preferences (remember these):\n' + state.memory.map((m) => '- ' + m.text.trim()).join('\n'));
-    }
-    return parts.join('\n\n');
+    return els.system.value.trim();
   }
 
   function buildPayload(conv) {
@@ -1532,7 +1430,6 @@
       updateContextBanner();
       // Opt-in automatic preference learning (background, non-blocking)
       if (reply.content) {
-        try { maybeRememberFromChat(conv); } catch (_) {}
       }
       drainQueue();
     }
@@ -1654,88 +1551,9 @@
     });
   }
 
-  function renderMemoryList() {
-    const list = document.getElementById('memoryList');
-    if (!list) return;
-    list.innerHTML = '';
-    const autoToggle = document.getElementById('autoMemory');
-    if (autoToggle) autoToggle.checked = !!state.autoMemory;
-    if (!state.memory.length) {
-      const n = document.createElement('p');
-      n.className = 'field-hint';
-      n.textContent = 'No memories yet.';
-      list.appendChild(n);
-      return;
-    }
-    state.memory.forEach((m, i) => {
-      const row = document.createElement('div');
-      row.className = 'memory-item';
-      const span = document.createElement('span');
-      span.textContent = m.text;
-      if (m.source === 'auto') {
-        const tag = document.createElement('em');
-        tag.className = 'memory-src';
-        tag.textContent = ' auto';
-        span.appendChild(tag);
-      }
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'icon-btn';
-      del.textContent = '×';
-      del.title = 'Remove';
-      del.setAttribute('aria-label', 'Remove memory');
-      del.onclick = () => {
-        state.memory.splice(i, 1);
-        persistMemory();
-        renderMemoryList();
-      };
-      row.append(span, del);
-      list.appendChild(row);
-    });
-  }
-  function addMemory() {
-    const input = document.getElementById('memoryInput');
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) return;
-    if (!addMemoryItem(text, 'user')) {
-      toast('Already in memory or too short.');
-      return;
-    }
-    input.value = '';
-    renderMemoryList();
-    toast('Memory saved.');
-  }
-  $('#openSettings').addEventListener('click', () => { renderMemoryList(); els.dlg.showModal(); });
+  $('#openSettings').addEventListener('click', () => els.dlg.showModal());
   $('#closeSettings').addEventListener('click', () => els.dlg.close());
   els.dlg.addEventListener('click', (e) => { if (e.target === els.dlg) els.dlg.close(); });
-  const memAdd = document.getElementById('memoryAdd');
-  const memInput = document.getElementById('memoryInput');
-  if (memAdd) memAdd.addEventListener('click', addMemory);
-  if (memInput) memInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); addMemory(); }
-  });
-  const autoMemEl = document.getElementById('autoMemory');
-  if (autoMemEl) {
-    autoMemEl.checked = !!state.autoMemory;
-    autoMemEl.addEventListener('change', () => {
-      setAutoMemory(autoMemEl.checked);
-      toast(autoMemEl.checked
-        ? 'Automatic memory on — preferences may be learned from chats (local only).'
-        : 'Automatic memory off.');
-    });
-  }
-  const memClear = document.getElementById('memoryClear');
-  if (memClear) {
-    memClear.addEventListener('click', () => {
-      if (!state.memory.length) return;
-      if (!confirm('Clear all memories? This cannot be undone.')) return;
-      state.memory = [];
-      persistMemory();
-      renderMemoryList();
-      toast('Memory cleared.');
-    });
-  }
   els.system.addEventListener('input', () => store.set('system', els.system.value));
   els.temp.addEventListener('input', () => { els.tval.textContent = els.temp.value; store.set('temp', els.temp.value); });
   els.base.addEventListener('change', () => { store.set('base', els.base.value); loadModels(); });

@@ -18,7 +18,6 @@ llamaDesk is built with **Tauri 2**. It runs as a native desktop application on 
 - **Message queue** — type and queue the next message while the model is still generating
 - **Continue generating** on the latest reply
 - **Context length warning** with one-click summarize of older messages
-- **User memory** — manual preferences plus optional automatic learning from chats (off by default; Settings → Memory)
 - **Custom model picker** that lists every model installed in Ollama
 - **Markdown rendering** with code blocks (syntax highlighting), tables, sequential lists, headings, **KaTeX math**, and **Mermaid diagrams**
 - **Reasoning display** (collapsible, state preserved while streaming) for models that return thinking
