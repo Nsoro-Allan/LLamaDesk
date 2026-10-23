@@ -2,7 +2,7 @@
 
 A fast, minimal **desktop** interface for chatting with your local [Ollama](https://ollama.com) models.
 
-llamaDesk is built with **Tauri 2**. It runs as a native desktop application on Windows and Linux. Your prompts, files, and chat history never leave your machine.
+LLamaDesk is built with **Tauri 2**. It runs as a native desktop application on Windows and Linux. Your prompts, files, and chat history never leave your machine.
 
 ## Features
 
