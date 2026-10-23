@@ -1,4 +1,4 @@
-<img src="src/Assets/favicon.png">
+<img src="src/Assets/favicon.png" width="80" height="80" >
 
 # LLamaDesk.
 
