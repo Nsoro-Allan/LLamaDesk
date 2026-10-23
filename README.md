@@ -321,8 +321,8 @@ The release workflow already passes these secrets into `tauri-action` and upload
 2. Commit, tag, and push:
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 3. Wait for the **Release** workflow to finish. Users on a signed build can then update in-app.
