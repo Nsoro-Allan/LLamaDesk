@@ -1,4 +1,4 @@
-# LLamaDesk
+# LLamaDesk.
 
 A fast, minimal **desktop** interface for chatting with your local [Ollama](https://ollama.com) models.
 
