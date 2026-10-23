@@ -1,4 +1,6 @@
-# LLamaDesk.
+<center><img src="src/Assets/favicon.png" width="40" height="40" >
+
+# LLamaDesk.</center>
 
 A fast, minimal **desktop** interface for chatting with your local [Ollama](https://ollama.com) models.
 
