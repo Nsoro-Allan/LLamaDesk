@@ -328,5 +328,4 @@ git push origin v0.1.1
 3. Wait for the **Release** workflow to finish. Users on a signed build can then update in-app.
 
 ## License
-
 Released under the [MIT License](LICENSE).
