@@ -156,7 +156,7 @@ This updates the files in `src-tauri/icons/`. Commit the generated icons so buil
   - Scanned / image PDFs: OCR via Tesseract.js (first OCR may download language data; later use is cached)
   - Limits: 40 MB file size, first 25 pages, ~100k characters
 - **Math & diagrams** in replies: `$inline$` / `$$display$$` via KaTeX; ` ```mermaid ` fenced blocks via Mermaid.
-- **Read aloud** uses the browser/OS speech engine (no cloud). Click the speaker icon on any reply.
+
 
 ## Configuration
 
