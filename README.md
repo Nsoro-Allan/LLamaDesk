@@ -303,7 +303,7 @@ llamaDesk can update itself from [GitHub Releases](https://github.com/Nsoro-Alla
 2. If a newer version exists, the user is prompted to **Download & install**.
 3. The installer is signature-checked with the public key in `src-tauri/tauri.conf.json`, then applied; the app restarts.
 
-### Maintainers: signing keys (required)
+### Maintainers: signing keys (required) (On Linux)
 
 Updates **must** be signed. Generate a keypair once:
 
